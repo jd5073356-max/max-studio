@@ -1,0 +1,31 @@
+# deps
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# build
+.next/
+dist/
+build/
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# misc
+.turbo/
+coverage/
