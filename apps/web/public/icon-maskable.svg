@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Safe zone: 40% del canvas (zona visible garantizada en cualquier máscara) -->
+  <rect width="512" height="512" fill="#7C3AED"/>
+  <path d="M168 352V160h36l52 104 52-104h36v192h-32V216l-56 112-56-112v136h-32z" fill="#FAFAFA"/>
+</svg>

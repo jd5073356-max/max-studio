@@ -118,13 +118,19 @@ Ver `apps/gateway/.env.example`. Keys: `SUPABASE_URL/SERVICE_KEY`, `JWT_SECRET`,
 9. **Single user — sin signup endpoint público.** Usuario inicial se crea con `init_user.py`.
 10. **Idioma UI: español. Código: inglés.**
 
-## Build Status (2026-04-16)
+## Build Status (2026-04-17)
 
 - ✅ Step 1: Scaffolding monorepo (pnpm workspace + Next 16 + gateway skeleton)
 - ✅ Step 2: shadcn/ui (15 componentes) + design tokens MAX + Inter/JetBrains Mono
 - ✅ Step 3: Layout base — `(app)` group + Sidebar + Header + ThemeToggle + AgentStatusDot + 6 stubs de sección
-- ⏳ Step 4: Auth (frontend + gateway) — **bloqueado por Python 3.12 o C++ Build Tools**
-- ⏳ Steps 5-16: Pendientes
+- ✅ Step 4: Auth (JWT cookie + bcrypt + rate limit + proxy.ts + /login) — pendiente provisionar Supabase
+- ✅ Step 5: WebSocket (gateway `/ws` + `WebSocketProvider` + Zustand `useWsStore`)
+- ✅ Step 6: Chat streaming (threads por gap >30min + MarkdownRenderer + historial)
+- ✅ Step 7: Tasks CRUD (scheduler hour/min/days[] + TaskForm + TaskTable + run-now)
+- ✅ Step 8: System monitoring (heartbeat agente + ping Dispatch/Pi/OpenClaw + polling 15s)
+- ✅ Step 15-A: PWA instalable (manifest.ts + iconos dinámicos + `public/sw.js` + InstallPrompt + offline page)
+- ⏳ Step 15-B: Web Push (VAPID + subscriptions + `/internal/notify`)
+- ⏳ Steps 9-14, 16: Pendientes (refactor model routing, auto-tasks, memory browser, docs, sandbox, settings)
 
 ## Notas de ajuste vs blueprint
 
@@ -133,7 +139,28 @@ Ver `apps/gateway/.env.example`. Keys: `SUPABASE_URL/SERVICE_KEY`, `JWT_SECRET`,
 - **Tailwind v4** — config en CSS (`@theme inline`), no `tailwind.config.ts` tradicional.
 - **Toast reemplazado por Sonner** (shadcn ya no provee `toast`).
 - **`pnpm dlx` rompe en Windows** con ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND — usar `npx --yes` para shadcn/create-next-app.
-- **Gateway Python:** venv creado pero deps NO instaladas — `pyiceberg` (transitiva de `supabase`) falla de compilar con Python 3.14 (sin wheels). Antes de Step 4: instalar Python 3.12 o MSVC Build Tools.
+- **Gateway Python:** reemplazamos `supabase-py` con un wrapper httpx propio (`app/core/supabase.py`) para bypassear `pyiceberg` en Python 3.14. Sin necesidad de MSVC.
+- **Next 16 renombró `middleware.ts` → `proxy.ts`.** El archivo está en `apps/web/src/proxy.ts` y exporta `proxy(request)`.
+- **slowapi 0.1.9 rompe FastAPI body introspection** (wrappea con *args/**kwargs, los Pydantic body params quedan como query). Reemplazado por `app/auth/ratelimit.py` (in-memory, thread-safe).
+
+## Schema real (Supabase existente de MAX)
+
+MAX Studio se monta sobre el Supabase productivo de MAX. **Tablas pre-existentes que MAX Studio usa** (no modificar):
+
+- **`conversations`** — log plano de mensajes (NO thread-grouping).
+  Columnas: `id uuid, engine text, role text, content text, embedding vector, created_at timestamptz`.
+  Uso PWA: INSERT con `engine='pwa'`, `role='user'` al enviar; `role='assistant'` cuando responde agent. Frontend agrupa visualmente por gap temporal (> 30 min = nuevo hilo).
+- **`scheduled_tasks`** — cron simple (hour/minute/days array, NO cron string).
+  Columnas: `id uuid, title, message, hour int, minute int, days int[] (0-6), status text, created_at`.
+  Frontend form: hora + minuto + checkboxes de días.
+- **`system_logs`** — `id uuid, service, level, message, metadata jsonb, created_at`. Solo lectura para `/system`.
+- **`tasks`** — agent jobs. `id uuid, title, status, result, scheduled_at, executed_at, service, metadata jsonb`.
+- **`knowledge`** — RAG store. `id uuid, category, content, embedding, created_at`. Solo lectura para `/memory/knowledge`.
+- **`tareas`** — reservada para uso personal del dueño (bigint id, titulo, prioridad, completada). MAX Studio NO toca.
+
+**Tablas nuevas creadas por MAX Studio:** `users`, `agent_heartbeats`, `generated_docs`, `push_subscriptions`.
+
+Migración aditiva: [docs/max_studio_init.sql](docs/max_studio_init.sql). Idempotente, seguro re-ejecutar.
 
 ## Archivos clave del layout base
 

@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 import "./globals.css";
 
 const inter = Inter({
@@ -31,6 +32,18 @@ export const metadata: Metadata = {
   },
 };
 
+// Next 16 separa viewport/themeColor de metadata. El themeColor controla
+// la barra de estado móvil cuando la PWA está instalada.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FAFAFA" },
+    { media: "(prefers-color-scheme: dark)", color: "#0A0A0B" },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -47,6 +60,7 @@ export default function RootLayout({
           <TooltipProvider delay={200}>{children}</TooltipProvider>
           <Toaster position="bottom-right" richColors closeButton />
         </ThemeProvider>
+        <ServiceWorkerRegistrar />
       </body>
     </html>
   );

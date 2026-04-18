@@ -1,15 +1,29 @@
+# MAX Studio Gateway — runtime dependencies
+# Instaladas por step. Descomentar el grupo que necesites.
+
+# --- Step 4+ (Auth + core API) ---
 fastapi[standard]==0.115.*
 uvicorn[standard]==0.32.*
 pydantic==2.*
 pydantic-settings==2.*
 python-jose[cryptography]==3.*
-passlib[bcrypt]==1.7.*
-supabase==2.*
-pywebpush==2.*
-weasyprint==63.*
-openpyxl==3.*
-python-docx==1.*
-docker==7.*
+bcrypt==5.*
+httpx==0.27.*
+
+# --- Step 7 (scheduled tasks) ---
 croniter==3.*
-slowapi==0.*
-httpx==0.*
+
+# --- Step 11+ (Web Push) ---
+# pywebpush==2.*
+
+# --- Step 13 (document generation) ---
+# weasyprint==63.*
+# openpyxl==3.*
+# python-docx==1.*
+
+# --- Step 14 (code sandbox) ---
+# docker==7.*
+
+# NOTA: no usamos supabase-py por incompatibilidad de pyiceberg con Python 3.14.
+# Accedemos a Supabase vía REST (PostgREST) con httpx directo.
+# Si en el futuro se necesita supabase-py, instalar Python 3.12 en paralelo.

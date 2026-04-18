@@ -2,18 +2,17 @@
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useWsStore } from "@/store/ws";
 
-interface AgentStatusDotProps {
-  online?: boolean;
-  lastSeen?: string | null;
-}
+export function AgentStatusDot() {
+  const agentOnline = useWsStore((s) => s.agentOnline);
+  const wsStatus = useWsStore((s) => s.status);
 
-export function AgentStatusDot({ online = false, lastSeen }: AgentStatusDotProps) {
-  const label = online
+  const label = agentOnline
     ? "Agent PC online"
-    : lastSeen
-      ? `Agent PC offline — último heartbeat ${lastSeen}`
-      : "Agent PC offline — sin heartbeats";
+    : wsStatus === "connected"
+      ? "Agent PC offline — MAX en cloud"
+      : "Conectando con gateway…";
 
   return (
     <Tooltip>
@@ -24,11 +23,11 @@ export function AgentStatusDot({ online = false, lastSeen }: AgentStatusDotProps
         <span
           className={cn(
             "h-2 w-2 rounded-full",
-            online ? "bg-success" : "bg-destructive",
+            agentOnline ? "bg-success" : "bg-destructive",
           )}
           aria-hidden
         />
-        {online && (
+        {agentOnline && (
           <span
             className="absolute h-2 w-2 animate-ping rounded-full bg-success opacity-75"
             aria-hidden

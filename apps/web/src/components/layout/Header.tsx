@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { AgentStatusDot } from "@/components/layout/AgentStatusDot";
+import { LogoutButton } from "@/components/layout/LogoutButton";
 
 const TITLES: Record<string, string> = {
   "/chat": "Chat",
@@ -65,8 +66,9 @@ export function Header() {
       <h1 className="flex-1 truncate text-sm font-medium">{title}</h1>
 
       <div className="flex items-center gap-1">
-        <AgentStatusDot online={false} />
+        <AgentStatusDot />
         <ThemeToggle />
+        <LogoutButton />
       </div>
     </header>
   );

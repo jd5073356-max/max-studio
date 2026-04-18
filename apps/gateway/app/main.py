@@ -1,18 +1,46 @@
-"""MAX Studio Gateway — entrypoint FastAPI.
+"""MAX Studio Gateway — entrypoint FastAPI."""
 
-Implementación mínima: arranca y responde /health.
-Los routers se agregan en Step 4 (auth) y siguientes.
-"""
+from __future__ import annotations
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(
-    title="MAX Studio Gateway",
-    version="0.1.0",
-    description="API Gateway para MAX Studio PWA",
-)
+from app.auth.routes import router as auth_router
+from app.chat.routes import router as chat_router
+from app.chat.ws import router as ws_router
+from app.core.config import get_settings
+from app.system.routes import router as system_router
+from app.tasks.routes import router as tasks_router
 
 
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "service": "max-studio-gateway"}
+def create_app() -> FastAPI:
+    settings = get_settings()
+
+    app = FastAPI(
+        title="MAX Studio Gateway",
+        version="0.1.0",
+        description="API Gateway para MAX Studio PWA",
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.allowed_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok", "service": "max-studio-gateway"}
+
+    app.include_router(auth_router)
+    app.include_router(ws_router)
+    app.include_router(chat_router)
+    app.include_router(tasks_router)
+    app.include_router(system_router)
+
+    return app
+
+
+app = create_app()
