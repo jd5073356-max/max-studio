@@ -32,6 +32,6 @@ export const config = {
   // Excluir: estáticos de Next, iconos dinámicos (icon/apple-icon), manifest
   // (tanto .json como .webmanifest), SW, favicon y cualquier archivo con extensión.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest\\.json|manifest\\.webmanifest|sw\\.js|icon|apple-icon|icons|.*\\..*).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest\\.json|manifest\\.webmanifest|sw\\.js|icon|apple-icon|icons|api/|.*\\..*).*)",
   ],
 };
