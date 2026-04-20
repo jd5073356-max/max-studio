@@ -41,6 +41,23 @@ export type UpdateTaskInput = Partial<CreateTaskInput> & {
   status?: Task["status"];
 };
 
+/** Entrada del log de conversaciones (tabla `conversations`). */
+export type Conversation = {
+  id: string;
+  engine: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+};
+
+/** Entrada del RAG store (tabla `knowledge`). */
+export type KnowledgeEntry = {
+  id: string;
+  category: string;
+  content: string;
+  created_at: string;
+};
+
 /** Status del sistema — respuesta de GET /system/status. */
 export type SystemStatus = {
   agent: {

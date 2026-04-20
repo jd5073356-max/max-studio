@@ -124,6 +124,41 @@ class SupabaseRest:
             raise SupabaseError(f"update {table} failed: {resp.status_code} {resp.text}")
         return resp.json() if resp.content else []
 
+    async def select_many_filtered(
+        self,
+        table: str,
+        *,
+        columns: str = "*",
+        filters: dict[str, Any] | None = None,
+        ilike: dict[str, str] | None = None,
+        order: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """select_many con soporte de filtros ILIKE y paginación."""
+        params: dict[str, str] = {
+            "select": columns,
+            "limit": str(limit),
+            "offset": str(offset),
+        }
+        if filters:
+            params.update(self._filters_to_params(filters))
+        if ilike:
+            for col, val in ilike.items():
+                params[col] = f"ilike.*{val}*"
+        if order:
+            params["order"] = order
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                self._table_url(table), params=params, headers=self._headers()
+            )
+        if resp.status_code != 200:
+            raise SupabaseError(
+                f"select_many_filtered {table} failed: {resp.status_code} {resp.text}"
+            )
+        return resp.json()
+
     async def upsert(
         self, table: str, row: dict[str, Any], *, on_conflict: str = "id"
     ) -> dict[str, Any] | None:

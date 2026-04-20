@@ -129,8 +129,9 @@ Ver `apps/gateway/.env.example`. Keys: `SUPABASE_URL/SERVICE_KEY`, `JWT_SECRET`,
 - ✅ Step 7: Tasks CRUD (scheduler hour/min/days[] + TaskForm + TaskTable + run-now)
 - ✅ Step 8: System monitoring (heartbeat agente + ping Dispatch/Pi/OpenClaw + polling 15s)
 - ✅ Step 15-A: PWA instalable (manifest.ts + iconos dinámicos + `public/sw.js` + InstallPrompt + offline page)
-- ⏳ Step 15-B: Web Push (VAPID + subscriptions + `/internal/notify`)
-- ⏳ Steps 9-14, 16: Pendientes (refactor model routing, auto-tasks, memory browser, docs, sandbox, settings)
+- ✅ Step 15-B: Web Push (VAPID + push/subscribe + /internal/notify + PushToggle en header)
+- ⏳ Step 16: Settings page (gateway URL editable, tema, info de cuenta)
+- ⏳ Steps 9-14: Pendientes (model routing, auto-tasks, memory browser, docs, sandbox)
 
 ## Notas de ajuste vs blueprint
 
