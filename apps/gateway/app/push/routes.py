@@ -60,14 +60,15 @@ async def subscribe(
     return {"ok": True}
 
 
-@router.delete("/push/subscribe", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/push/subscribe")
 async def unsubscribe(
     body: PushSubscription,
     user: CurrentUser,  # noqa: ARG001
     sb: SupabaseDep,
-) -> None:
+) -> dict[str, bool]:
     """Elimina la suscripción push."""
     await sb.delete("push_subscriptions", {"endpoint": body.endpoint})
+    return {"ok": True}
 
 
 # ── Ruta interna (solo INTERNAL_API_KEY) ─────────────────────────────────────
