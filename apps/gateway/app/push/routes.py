@@ -107,6 +107,18 @@ async def notify(
     sent = 0
     stale: list[str] = []
 
+    # La clave puede estar como base64(PEM) o como PEM directo.
+    # Intentamos decodificarla; si el resultado es un PEM lo usamos, si no dejamos el original.
+    import base64 as _b64
+    vapid_key = settings.vapid_private_key
+    try:
+        padded = vapid_key + "=" * (4 - len(vapid_key) % 4)
+        decoded = _b64.urlsafe_b64decode(padded).decode("utf-8")
+        if decoded.startswith("-----BEGIN"):
+            vapid_key = decoded
+    except Exception:
+        pass
+
     payload = json.dumps({
         "title": body.title,
         "body": body.body,
@@ -122,7 +134,7 @@ async def notify(
                     "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]},
                 },
                 data=payload,
-                vapid_private_key=settings.vapid_private_key,
+                vapid_private_key=vapid_key,
                 vapid_claims={"sub": settings.vapid_subject},
             )
             sent += 1
