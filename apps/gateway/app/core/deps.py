@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, status
 
 from app.auth.jwt import InvalidToken, decode_token
 from app.core.config import Settings, get_settings
@@ -19,14 +19,27 @@ async def get_current_user(
     sb: SupabaseDep,
     settings: SettingsDep,
     max_auth: Annotated[str | None, Cookie(alias=None)] = None,
+    authorization: Annotated[str | None, Header(alias="authorization")] = None,
 ) -> dict:
-    """Extrae usuario del JWT en cookie.
+    """Extrae usuario del JWT.
 
-    Raises 401 si la cookie falta, es inválida o el usuario no existe.
+    Acepta el token de dos fuentes (en orden de prioridad):
+    1. Header Authorization: Bearer <token>  — usado por el frontend PWA cross-origin
+    2. Cookie max_auth                        — usado por requests server-side
+
+    Raises 401 si ninguna fuente provee un token válido.
     """
-    # Cookie con nombre dinámico desde settings
-    token = max_auth
-    if token is None:
+    token: str | None = None
+
+    # Prioridad 1: Bearer header
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+
+    # Prioridad 2: cookie
+    if not token:
+        token = max_auth
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado"
         )

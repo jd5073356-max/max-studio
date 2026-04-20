@@ -1,4 +1,5 @@
 import type { ApiErrorBody } from "@/types/api";
+import { getToken } from "@/store/auth";
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL;
 
@@ -19,12 +20,14 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
   }
 
   const { body, headers, ...rest } = options;
+  const token = getToken();
   const init: RequestInit = {
     ...rest,
     credentials: "include",
     headers: {
       Accept: "application/json",
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,

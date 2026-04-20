@@ -5,6 +5,8 @@ export type User = {
 
 export type LoginResponse = {
   user: User;
+  /** JWT devuelto al cliente para enviarlo como Bearer en llamadas cross-origin al gateway */
+  access_token: string;
 };
 
 export type ApiErrorBody = {

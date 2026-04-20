@@ -1,0 +1,29 @@
+/**
+ * Store de autenticación.
+ * Persiste el JWT en localStorage para que sobreviva recargas.
+ * El token se usa como Bearer en llamadas cross-origin al gateway.
+ */
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+
+interface AuthState {
+  token: string | null;
+  setToken: (token: string) => void;
+  clearToken: () => void;
+}
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      token: null,
+      setToken: (token) => set({ token }),
+      clearToken: () => set({ token: null }),
+    }),
+    { name: "max.auth" },
+  ),
+);
+
+/** Obtener el token fuera de un componente React (ej: en apiFetch) */
+export function getToken(): string | null {
+  return useAuthStore.getState().token;
+}

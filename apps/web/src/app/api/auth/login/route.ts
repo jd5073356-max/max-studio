@@ -51,7 +51,9 @@ export async function POST(req: NextRequest) {
   const tokenMatch = setCookieHeader?.match(new RegExp(`${COOKIE_NAME}=([^;]+)`));
   const token = tokenMatch?.[1];
 
-  const res = NextResponse.json<LoginResponse>(data as LoginResponse);
+  // Incluir el token en el body para que el cliente lo guarde y lo use como Bearer
+  const responseData = { ...(data as object), access_token: token ?? "" } as LoginResponse;
+  const res = NextResponse.json<LoginResponse>(responseData);
 
   if (token) {
     res.cookies.set(COOKIE_NAME, token, {
