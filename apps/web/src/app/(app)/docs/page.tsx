@@ -173,8 +173,8 @@ export default function DocsPage() {
 
   useEffect(() => {
     apiFetch<Doc[]>("/docs")
-      .then(setDocs)
-      .catch(() => null)
+      .then((data) => setDocs(Array.isArray(data) ? data : []))
+      .catch(() => setDocs([]))
       .finally(() => setLoading(false));
   }, []);
 
