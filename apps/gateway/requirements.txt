@@ -14,7 +14,7 @@ httpx==0.27.*
 croniter==3.*
 
 # --- Step 11+ (Web Push) ---
-# pywebpush==2.*
+pywebpush==2.*
 
 # --- Step 13 (document generation) ---
 # weasyprint==63.*

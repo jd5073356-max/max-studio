@@ -124,6 +124,21 @@ class SupabaseRest:
             raise SupabaseError(f"update {table} failed: {resp.status_code} {resp.text}")
         return resp.json() if resp.content else []
 
+    async def upsert(
+        self, table: str, row: dict[str, Any], *, on_conflict: str = "id"
+    ) -> dict[str, Any] | None:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                self._table_url(table),
+                params={"on_conflict": on_conflict},
+                json=row,
+                headers=self._headers(prefer="resolution=merge-duplicates,return=representation"),
+            )
+        if resp.status_code not in (200, 201):
+            raise SupabaseError(f"upsert {table} failed: {resp.status_code} {resp.text}")
+        rows = resp.json()
+        return rows[0] if rows else None
+
     async def delete(self, table: str, filters: dict[str, Any]) -> None:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.delete(

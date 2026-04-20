@@ -15,6 +15,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { AgentStatusDot } from "@/components/layout/AgentStatusDot";
 import { LogoutButton } from "@/components/layout/LogoutButton";
+import { PushToggle } from "@/components/pwa/PushToggle";
 
 const TITLES: Record<string, string> = {
   "/chat": "Chat",
@@ -67,6 +68,7 @@ export function Header() {
 
       <div className="flex items-center gap-1">
         <AgentStatusDot />
+        <PushToggle />
         <ThemeToggle />
         <LogoutButton />
       </div>
