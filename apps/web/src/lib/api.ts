@@ -1,7 +1,6 @@
 import type { ApiErrorBody } from "@/types/api";
 import { getToken } from "@/store/auth";
-
-const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL;
+import { getGatewayUrl } from "@/store/settings";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -15,6 +14,7 @@ type FetchOptions = Omit<RequestInit, "body"> & {
 };
 
 export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
+  const GATEWAY_URL = getGatewayUrl();
   if (!GATEWAY_URL) {
     throw new Error("NEXT_PUBLIC_GATEWAY_URL no configurado");
   }
