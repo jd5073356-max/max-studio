@@ -41,6 +41,28 @@ export type UpdateTaskInput = Partial<CreateTaskInput> & {
   status?: Task["status"];
 };
 
+/** Job de agent.py (tabla `tasks`). */
+export type AgentJob = {
+  id: string;
+  title: string;
+  status: "pending" | "running" | "done" | "error";
+  result: string | null;
+  scheduled_at: string | null;
+  executed_at: string | null;
+  service: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+/** Resultado de ejecución en sandbox (POST /sandbox/run). */
+export type SandboxResult = {
+  stdout: string;
+  stderr: string;
+  exit_code: number;
+  duration_ms: number;
+  language: string;
+};
+
 /** Entrada del log de conversaciones (tabla `conversations`). */
 export type Conversation = {
   id: string;

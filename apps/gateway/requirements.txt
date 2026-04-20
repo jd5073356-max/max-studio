@@ -22,7 +22,7 @@ pywebpush==2.*
 # python-docx==1.*
 
 # --- Step 14 (code sandbox) ---
-# docker==7.*
+docker==7.*
 
 # NOTA: no usamos supabase-py por incompatibilidad de pyiceberg con Python 3.14.
 # Accedemos a Supabase vía REST (PostgREST) con httpx directo.

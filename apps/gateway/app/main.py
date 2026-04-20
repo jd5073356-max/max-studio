@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.docs.routes import router as docs_router
 from app.memory.routes import router as memory_router
 from app.push.routes import router as push_router
+from app.sandbox.routes import router as sandbox_router
 from app.system.routes import router as system_router
 from app.tasks.routes import router as tasks_router
 
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     app.include_router(docs_router)
     app.include_router(memory_router)
     app.include_router(push_router)
+    app.include_router(sandbox_router)
 
     return app
 
