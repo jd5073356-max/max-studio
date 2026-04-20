@@ -116,7 +116,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await handle_chat_send(user_id, data)
 
     except WebSocketDisconnect:
-        manager.disconnect(user_id)
+        manager.disconnect(user_id, websocket)
     except Exception as exc:
         logger.error("WS error user=%s: %s", user_id, exc)
-        manager.disconnect(user_id)
+        manager.disconnect(user_id, websocket)

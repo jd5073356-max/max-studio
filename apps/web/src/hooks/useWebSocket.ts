@@ -36,7 +36,8 @@ export function useWebSocket(
   useEffect(() => {
     // Crear el cliente singleton la primera vez
     if (!clientInstance) {
-      clientInstance = new WebSocketClient(buildWsUrl(), setStatus);
+      // Pasamos buildWsUrl como factory — reconstruye URL (con token fresco) en cada reconexión
+      clientInstance = new WebSocketClient(buildWsUrl, setStatus);
       clientInstance.connect();
     }
 

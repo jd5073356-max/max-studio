@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 
-import { getWsClient } from "@/hooks/useWebSocket";
+import { useWebSocket, getWsClient } from "@/hooks/useWebSocket";
 import { useThreads } from "@/hooks/useThreads";
 import { useChatStore } from "@/store/chat";
 import type { WsInboundEvent } from "@/types/ws-events";
@@ -16,30 +16,25 @@ export function useChat() {
 
   const { loadThreads, openThread, newThread } = useThreads();
 
-  // Registrar listeners WS para eventos de chat
-  useEffect(() => {
-    const client = getWsClient();
-    if (!client) return;
-
-    const unsub = client.on((event: WsInboundEvent) => {
+  // Listener estable — se registra a través de useWebSocket que garantiza
+  // que el singleton ya existe cuando se registra el listener
+  const handleWsEvent = useCallback(
+    (event: WsInboundEvent) => {
       if (event.type === "chat.token") {
         onToken(event.session_id, event.token);
       } else if (event.type === "chat.done") {
         onDone(event.session_id, event.model_used, event.conversation_id);
-        // Refresh sidebar: el hilo activo creció o se creó uno nuevo
         void loadThreads();
       } else if (event.type === "chat.error") {
         onError(event.session_id, event.detail);
       }
-    });
+    },
+    [onToken, onDone, onError, loadThreads],
+  );
 
-    return unsub;
-  }, [onToken, onDone, onError, loadThreads]);
+  // Esto garantiza que el listener se registra DESPUÉS de que el singleton existe
+  useWebSocket(handleWsEvent);
 
-  /**
-   * Carga inicial: trae lista de hilos; si existe alguno, abre el más
-   * reciente. Si no hay hilos, arranca estado vacío (nuevo hilo).
-   */
   const loadHistory = useCallback(async () => {
     const threads = await loadThreads();
     if (threads.length > 0) {

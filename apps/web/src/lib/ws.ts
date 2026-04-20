@@ -16,7 +16,8 @@ export class WebSocketClient {
   private onStatusChange: (status: "connecting" | "connected" | "disconnected") => void;
 
   constructor(
-    private readonly url: string,
+    /** Función que construye la URL en cada intento — garantiza token fresco */
+    private readonly getUrl: () => string,
     onStatusChange: (status: "connecting" | "connected" | "disconnected") => void,
   ) {
     this.onStatusChange = onStatusChange;
@@ -26,7 +27,7 @@ export class WebSocketClient {
     if (this.stopped) return;
     this.onStatusChange("connecting");
     try {
-      this.ws = new WebSocket(this.url);
+      this.ws = new WebSocket(this.getUrl());
     } catch {
       this.scheduleReconnect();
       return;
