@@ -4,12 +4,22 @@ import { useEffect, useRef } from "react";
 
 import { WebSocketClient } from "@/lib/ws";
 import { useWsStore } from "@/store/ws";
+import { getToken } from "@/store/auth";
+import { useSettingsStore } from "@/store/settings";
 import type { WsInboundEvent } from "@/types/ws-events";
-
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8003/ws";
 
 // Singleton — una sola instancia por sesión de la app
 let clientInstance: WebSocketClient | null = null;
+
+/** Construye la URL del WS con el token como query param */
+function buildWsUrl(): string {
+  const override = useSettingsStore.getState().gatewayUrlOverride;
+  const base = override || process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8003";
+  // Convertir http(s) → ws(s) si el override es una URL http
+  const wsBase = base.replace(/^http/, "ws").replace(/\/$/, "");
+  const token = getToken();
+  return token ? `${wsBase}/ws?token=${token}` : `${wsBase}/ws`;
+}
 
 /** Accede al cliente WS activo sin pasar por el hook (para useChat, etc.) */
 export function getWsClient(): WebSocketClient | null {
@@ -26,7 +36,7 @@ export function useWebSocket(
   useEffect(() => {
     // Crear el cliente singleton la primera vez
     if (!clientInstance) {
-      clientInstance = new WebSocketClient(WS_URL, setStatus);
+      clientInstance = new WebSocketClient(buildWsUrl(), setStatus);
       clientInstance.connect();
     }
 

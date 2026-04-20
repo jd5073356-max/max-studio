@@ -86,7 +86,8 @@ async def handle_chat_send(user_id: str, data: dict) -> None:
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
-    token = websocket.cookies.get("max_auth")
+    # Acepta token desde query param (cross-origin PWA) o cookie (server-side)
+    token = websocket.query_params.get("token") or websocket.cookies.get("max_auth")
     if not token:
         await websocket.close(code=4001, reason="No autenticado")
         return
