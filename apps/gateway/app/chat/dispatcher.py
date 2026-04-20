@@ -1,16 +1,24 @@
-"""Dispatcher de chat — streaming vía Anthropic API.
+"""Dispatcher de chat — routing via Dispatch :8001.
 
-Para Step 9 se añadirá routing a través de Dispatch :8001 (multi-LLM).
-Por ahora: httpx directo a Anthropic con SSE streaming.
+Dispatch clasifica el mensaje y enruta al modelo correcto:
+  nivel 1: minimax-m2.7:cloud  (respuesta rápida)
+  nivel 2: gpt-oss:120b / qwen3.5  (normal)
+  nivel 3: kimi-k2.5 / lead  (complejo)
+  nivel 4: claude-sonnet/opus  (razonamiento profundo)
+
+El gateway NO llama a Anthropic directamente — eso le corresponde a Dispatch.
+Fallback a Anthropic solo si DISPATCH_SECRET no está configurado (modo dev).
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timedelta
 from typing import AsyncGenerator
 
 import httpx
+from jose import jwt as jose_jwt
 
 from app.core.config import get_settings
 
@@ -26,26 +34,59 @@ SYSTEM_PROMPT = (
 )
 
 
-async def stream_response(
+def _create_dispatch_token(secret: str) -> str:
+    """Genera JWT HS256 compatible con el verify_jwt de Dispatch."""
+    now = datetime.utcnow()
+    payload = {
+        "sub": "max-studio-gateway",
+        "iat": now,
+        "exp": now + timedelta(hours=1),
+    }
+    return jose_jwt.encode(payload, secret, algorithm="HS256")
+
+
+async def _via_dispatch(content: str, settings) -> AsyncGenerator[str, None]:
+    """Llama a Dispatch y simula streaming por palabras."""
+    token = _create_dispatch_token(settings.dispatch_secret)
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            f"{settings.dispatch_url}/dispatch",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            json={"message": content},
+        )
+
+    if resp.status_code != 200:
+        raise ValueError(f"Dispatch {resp.status_code}: {resp.text[:300]}")
+
+    data = resp.json()
+    reply: str = data.get("reply", "").strip()
+    if not reply:
+        raise ValueError("Dispatch no retornó respuesta")
+
+    logger.info(
+        "Dispatch OK — nivel=%s pi=%s claude=%s",
+        data.get("level"),
+        data.get("models_used", {}).get("pi"),
+        data.get("models_used", {}).get("claude"),
+    )
+
+    # Simular streaming: yield palabra a palabra
+    words = reply.split(" ")
+    for i, word in enumerate(words):
+        yield word + (" " if i < len(words) - 1 else "")
+
+
+async def _via_anthropic(
     content: str,
     history: list[dict[str, str]],
-    *,
-    model: str | None = None,
+    settings,
+    model: str | None,
 ) -> AsyncGenerator[str, None]:
-    """Llama Anthropic con streaming y hace yield de fragmentos de texto.
-
-    Args:
-        content: mensaje del usuario (NO incluido en history).
-        history: historial previo en formato Anthropic [{role, content}].
-        model: modelo a usar. Si None, usa default_model del .env.
-
-    Yields:
-        Fragmentos de texto conforme llegan del stream SSE.
-
-    Raises:
-        ValueError: si ANTHROPIC_API_KEY no está configurado o la API responde error.
-    """
-    settings = get_settings()
+    """Fallback directo a Anthropic (solo si DISPATCH_SECRET no está configurado)."""
     api_key = settings.anthropic_api_key
     if not api_key:
         raise ValueError(
@@ -86,10 +127,32 @@ async def stream_response(
                 except json.JSONDecodeError:
                     continue
 
-                # content_block_delta → text_delta contiene el token
                 if event.get("type") == "content_block_delta":
                     delta = event.get("delta", {})
                     if delta.get("type") == "text_delta":
                         text = delta.get("text", "")
                         if text:
                             yield text
+
+
+async def stream_response(
+    content: str,
+    history: list[dict[str, str]],
+    *,
+    model: str | None = None,
+) -> AsyncGenerator[str, None]:
+    """Punto de entrada principal.
+
+    Prioridad:
+      1. Dispatch :8001 (si DISPATCH_SECRET está configurado)
+      2. Anthropic directo (fallback modo dev)
+    """
+    settings = get_settings()
+
+    if settings.dispatch_secret:
+        async for token in _via_dispatch(content, settings):
+            yield token
+    else:
+        logger.warning("DISPATCH_SECRET no configurado — usando Anthropic directo (modo dev)")
+        async for token in _via_anthropic(content, history, settings, model):
+            yield token

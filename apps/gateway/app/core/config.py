@@ -44,6 +44,7 @@ class Settings(BaseSettings):
 
     # Servicios MAX internos
     dispatch_url: str = "http://localhost:8001"
+    dispatch_secret: str = Field(default="", description="JWT secret compartido con Dispatch")
     pi_service_url: str = "http://localhost:8000"
     openclaw_url: str = "http://localhost:8002"
 
