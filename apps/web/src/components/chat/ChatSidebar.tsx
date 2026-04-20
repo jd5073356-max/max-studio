@@ -21,7 +21,14 @@ function formatRelative(iso: string): string {
   return date.toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
 }
 
-export function ChatSidebar() {
+interface ChatSidebarProps {
+  /** Muestra el aside aunque esté en móvil (para usar dentro de un Sheet drawer) */
+  forceVisible?: boolean;
+  /** Callback al navegar a un hilo (para cerrar el drawer en móvil) */
+  onNavigate?: () => void;
+}
+
+export function ChatSidebar({ forceVisible, onNavigate }: ChatSidebarProps = {}) {
   const threads = useChatStore((s) => s.threads);
   const activeThreadId = useChatStore((s) => s.activeThreadId);
   const { loadThreads, openThread, newThread } = useThreads();
@@ -31,7 +38,12 @@ export function ChatSidebar() {
   }, [loadThreads]);
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-border bg-background">
+    <aside
+      className={cn(
+        "h-full w-64 shrink-0 flex-col border-r border-border bg-background",
+        forceVisible ? "flex" : "hidden md:flex",
+      )}
+    >
       <div className="border-b border-border p-3">
         <Button
           onClick={newThread}
@@ -57,7 +69,7 @@ export function ChatSidebar() {
                 <li key={t.id}>
                   <button
                     type="button"
-                    onClick={() => openThread(t.id)}
+                    onClick={() => { openThread(t.id); onNavigate?.(); }}
                     className={cn(
                       "w-full rounded-md px-2.5 py-2 text-left text-sm transition-colors",
                       "hover:bg-card",

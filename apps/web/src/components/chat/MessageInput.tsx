@@ -43,7 +43,7 @@ export function MessageInput({ onSend, disabled }: Props) {
         <textarea
           ref={ref}
           rows={1}
-          placeholder="Escribe un mensaje… (Enter envía · Shift+Enter nueva línea)"
+          placeholder="Escribe un mensaje…"
           disabled={disabled}
           className="max-h-[200px] flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
           onKeyDown={handleKeyDown}
@@ -60,7 +60,7 @@ export function MessageInput({ onSend, disabled }: Props) {
           <ArrowUp className="h-4 w-4" />
         </Button>
       </div>
-      <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
+      <p className="mt-1 hidden text-center text-[10px] text-muted-foreground md:block">
         MAX puede cometer errores · verifica información importante
       </p>
     </div>
