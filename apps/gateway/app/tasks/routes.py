@@ -60,6 +60,21 @@ def _enrich(row: dict) -> dict:
 # ────────────────────────────────────────────────────────────────────
 
 
+@router.get("/jobs")
+async def list_jobs(
+    sb: SupabaseDep,
+    _user: CurrentUser,
+    limit: int = 50,
+) -> list[dict]:
+    """Historial de ejecuciones de agent.py (tabla `tasks`)."""
+    return await sb.select_many(
+        "tasks",
+        columns="id,title,status,result,scheduled_at,executed_at,service,metadata,created_at",
+        order="created_at.desc",
+        limit=limit,
+    )
+
+
 @router.get("")
 async def list_tasks(sb: SupabaseDep, _user: CurrentUser) -> list[dict]:
     """Devuelve todas las tareas, activas primero, ordenadas por próximo run."""
