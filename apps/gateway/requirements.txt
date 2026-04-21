@@ -17,9 +17,9 @@ croniter==3.*
 pywebpush==2.*
 
 # --- Step 13 (document generation) ---
-# weasyprint==63.*
-# openpyxl==3.*
-# python-docx==1.*
+openpyxl==3.*
+python-docx==1.*
+python-pptx==1.*
 
 # --- Step 14 (code sandbox) ---
 docker==7.*

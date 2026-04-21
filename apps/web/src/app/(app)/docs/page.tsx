@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, FileCode, FileText, Loader2, Plus, Sparkles, X } from "lucide-react";
+import {
+  Download, FileCode, FileText, Loader2, Plus, Sparkles, X,
+  FileSpreadsheet, Presentation, PenTool, Layout,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,11 +29,50 @@ type GenerateResult = {
   preview: string;
 };
 
-const FORMATS = [
-  { value: "md", label: "Markdown", icon: FileText },
-  { value: "html", label: "HTML", icon: FileCode },
-  { value: "txt", label: "Texto", icon: FileText },
+// ── Grupos de formato ─────────────────────────────────────────────────────────
+
+const FORMAT_GROUPS = [
+  {
+    label: "Texto",
+    formats: [
+      { value: "md", label: "Markdown" },
+      { value: "html", label: "HTML" },
+      { value: "txt", label: "Texto plano" },
+      { value: "csv", label: "CSV" },
+    ],
+  },
+  {
+    label: "Office",
+    formats: [
+      { value: "docx", label: "Word (.docx)" },
+      { value: "xlsx", label: "Excel (.xlsx)" },
+      { value: "pptx", label: "PowerPoint (.pptx)" },
+    ],
+  },
+  {
+    label: "Código",
+    formats: [
+      { value: "py", label: "Python" },
+      { value: "java", label: "Java" },
+      { value: "cpp", label: "C++" },
+      { value: "js", label: "JavaScript" },
+      { value: "ts", label: "TypeScript" },
+      { value: "sql", label: "SQL" },
+      { value: "css", label: "CSS" },
+      { value: "json", label: "JSON" },
+      { value: "yaml", label: "YAML" },
+    ],
+  },
+  {
+    label: "Diagrama",
+    formats: [
+      { value: "excalidraw", label: "Excalidraw" },
+      { value: "canvas", label: "Canvas (Obsidian)" },
+    ],
+  },
 ];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatBytes(bytes: number | null) {
   if (!bytes) return "—";
@@ -47,9 +89,43 @@ function formatDate(iso: string) {
   });
 }
 
-function DocIcon({ mime }: { mime: string }) {
-  if (mime.includes("html")) return <FileCode className="h-4 w-4 text-orange-400" />;
-  return <FileText className="h-4 w-4 text-primary" />;
+function DocIcon({ mime, filename }: { mime: string; filename: string }) {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  if (["xlsx", "csv"].includes(ext)) return <FileSpreadsheet className="h-4 w-4 text-green-400" />;
+  if (ext === "pptx") return <Presentation className="h-4 w-4 text-orange-400" />;
+  if (ext === "docx") return <FileText className="h-4 w-4 text-blue-400" />;
+  if (ext === "excalidraw") return <PenTool className="h-4 w-4 text-purple-400" />;
+  if (ext === "canvas") return <Layout className="h-4 w-4 text-yellow-400" />;
+  if (mime.includes("html") || ["js", "ts", "java", "cpp", "py", "sql", "css"].includes(ext))
+    return <FileCode className="h-4 w-4 text-primary" />;
+  return <FileText className="h-4 w-4 text-muted-foreground" />;
+}
+
+// ── Selector de formato ───────────────────────────────────────────────────────
+function FormatSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+    >
+      {FORMAT_GROUPS.map((group) => (
+        <optgroup key={group.label} label={group.label}>
+          {group.formats.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
 }
 
 // ── Formulario de generación ──────────────────────────────────────────────────
@@ -71,10 +147,22 @@ function GenerateForm({ onCreated }: { onCreated: (doc: Doc) => void }) {
         body: { title, format, prompt },
       });
       setPreview(result.preview);
+      const ext = format;
+      const mimeMap: Record<string, string> = {
+        md: "text/markdown", html: "text/html", txt: "text/plain", csv: "text/csv",
+        py: "text/x-python", java: "text/x-java-source", cpp: "text/x-c++src",
+        js: "application/javascript", ts: "application/typescript",
+        sql: "application/sql", css: "text/css", json: "application/json",
+        yaml: "application/yaml",
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        excalidraw: "application/json", canvas: "application/json",
+      };
       onCreated({
         id: result.id,
         filename: result.filename,
-        mime_type: format === "html" ? "text/html" : format === "txt" ? "text/plain" : "text/markdown",
+        mime_type: mimeMap[ext] ?? "application/octet-stream",
         size_bytes: result.size_bytes,
         created_at: new Date().toISOString(),
       });
@@ -103,7 +191,12 @@ function GenerateForm({ onCreated }: { onCreated: (doc: Doc) => void }) {
           <Sparkles className="h-4 w-4 text-primary" />
           Nuevo documento
         </span>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setOpen(false); setPreview(null); }}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={() => { setOpen(false); setPreview(null); }}
+        >
           <X className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -114,29 +207,13 @@ function GenerateForm({ onCreated }: { onCreated: (doc: Doc) => void }) {
           id="doc-title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Ej: Resumen semanal de tareas"
+          placeholder="Ej: Análisis de ventas Q2"
         />
       </div>
 
       <div className="space-y-1.5">
         <Label>Formato</Label>
-        <div className="flex gap-1.5">
-          {FORMATS.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => setFormat(f.value)}
-              className={cn(
-                "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
-                format === f.value
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-background text-muted-foreground hover:border-primary/40",
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+        <FormatSelect value={format} onChange={setFormat} />
       </div>
 
       <div className="space-y-1.5">
@@ -146,7 +223,7 @@ function GenerateForm({ onCreated }: { onCreated: (doc: Doc) => void }) {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           rows={3}
-          placeholder="Ej: Redacta un informe de las últimas tareas completadas, con métricas y próximos pasos."
+          placeholder="Ej: Crea una presentación de 5 slides con el plan de negocio para AutoFlow Studio."
           className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
         />
       </div>
@@ -158,7 +235,11 @@ function GenerateForm({ onCreated }: { onCreated: (doc: Doc) => void }) {
         </div>
       )}
 
-      <Button onClick={submit} disabled={loading || !title.trim() || !prompt.trim()} className="w-full gap-2">
+      <Button
+        onClick={submit}
+        disabled={loading || !title.trim() || !prompt.trim()}
+        className="w-full gap-2"
+      >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
         {loading ? "Generando…" : "Generar con MAX"}
       </Button>
@@ -208,7 +289,7 @@ export default function DocsPage() {
               key={doc.id}
               className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 hover:border-primary/30 transition-colors"
             >
-              <DocIcon mime={doc.mime_type} />
+              <DocIcon mime={doc.mime_type} filename={doc.filename} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{doc.filename}</p>
                 <p className="text-[10px] text-muted-foreground">
