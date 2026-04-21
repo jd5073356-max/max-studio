@@ -27,6 +27,7 @@ from pydantic import BaseModel
 from app.chat.dispatcher import stream_response
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, SupabaseDep
+from app.kimi.client import generate_text as kimi_generate
 
 router = APIRouter(prefix="/docs", tags=["docs"])
 
@@ -318,10 +319,26 @@ async def generate_doc(
         f"Formato requerido: {hint}"
     )
 
-    # Llamar al LLM
+    # Formatos binarios/complejos → Kimi K2.6 (mejor estructura, 256K contexto)
+    # Resto → Dispatch (gpt-120, más rápido y gratis)
+    use_kimi = fmt in BINARY_FORMATS and bool(settings.moonshot_api_key)
+
     raw_content = ""
-    async for token in stream_response(full_prompt, [], model=settings.default_model):
-        raw_content += token
+    if use_kimi:
+        try:
+            raw_content = await kimi_generate(
+                prompt=full_prompt,
+                system="Eres un asistente experto en generación de documentos profesionales.",
+            )
+        except Exception as exc:
+            # Fallback a Dispatch si Kimi falla
+            import logging
+            logging.getLogger(__name__).warning("Kimi fallback to Dispatch: %s", exc)
+            use_kimi = False
+
+    if not use_kimi:
+        async for token in stream_response(full_prompt, [], model=settings.default_model):
+            raw_content += token
 
     if not raw_content.strip():
         raise HTTPException(

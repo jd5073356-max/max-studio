@@ -22,6 +22,48 @@ logger = logging.getLogger(__name__)
 MOONSHOT_BASE_URL = "https://api.moonshot.cn/v1"
 
 
+async def generate_text(
+    prompt: str,
+    system: str = "",
+    thinking: bool = False,
+) -> str:
+    """Genera texto con Kimi K2.6 (sin imagen). Útil para docs complejos."""
+    settings = get_settings()
+    if not settings.moonshot_api_key:
+        raise ValueError("MOONSHOT_API_KEY no configurada")
+
+    messages: list[dict] = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+
+    payload: dict[str, Any] = {
+        "model": settings.moonshot_model,
+        "messages": messages,
+        "max_tokens": 8192,
+        "temperature": 0.3,
+    }
+
+    async with httpx.AsyncClient(timeout=90) as client:
+        resp = await client.post(
+            f"{MOONSHOT_BASE_URL}/chat/completions",
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {settings.moonshot_api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+
+    if resp.status_code != 200:
+        logger.error("Kimi API error %s: %s", resp.status_code, resp.text[:300])
+        raise RuntimeError(f"Kimi API error {resp.status_code}: {resp.text[:200]}")
+
+    data = resp.json()
+    content: str = data["choices"][0]["message"]["content"]
+    logger.info("Kimi text OK tokens=%s", data.get("usage", {}).get("total_tokens"))
+    return content
+
+
 async def analyze_image(
     message: str,
     image_base64: str,
