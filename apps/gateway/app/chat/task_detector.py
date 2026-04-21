@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
@@ -54,6 +55,13 @@ def _has_schedule_keyword(text: str) -> bool:
 def _parse_days(text: str) -> list[int] | None:
     low = text.lower()
 
+    # Relativos: mañana / hoy → día concreto de la semana
+    if re.search(r"\bma[ñn]ana\b|\btomorrow\b", low):
+        tomorrow = (date.today() + timedelta(days=1)).weekday()  # 0=lun
+        return [tomorrow]
+    if re.search(r"\bhoy\b|\btoday\b", low):
+        return [date.today().weekday()]
+
     # Atajos globales
     if any(k in low for k in ("cada día", "cada dia", "todos los días", "todos los dias", "every day", "diariamente", "daily")):
         return _ALL_DAYS
@@ -73,7 +81,13 @@ def _parse_days(text: str) -> list[int] | None:
 
 def _parse_time(text: str) -> tuple[int, int] | None:
     """Extrae hora y minuto del texto. Retorna (hour, minute) o None."""
-    # Patrón "HH:MM" o "H:MM"
+    # Palabras especiales primero
+    if re.search(r"\bmedianoche\b|\bmidnight\b", text, re.IGNORECASE):
+        return 0, 0
+    if re.search(r"\bmediodia\b|\bmediodía\b|\bnoon\b", text, re.IGNORECASE):
+        return 12, 0
+
+    # Patrón "HH:MM" con am/pm opcional
     m = re.search(r"\b(\d{1,2}):(\d{2})\s*(am|pm|a\.m\.|p\.m\.)?", text, re.IGNORECASE)
     if m:
         h, mi = int(m.group(1)), int(m.group(2))
@@ -97,11 +111,16 @@ def _parse_time(text: str) -> tuple[int, int] | None:
         if 0 <= h <= 23:
             return h, 0
 
-    # Palabras especiales
-    if re.search(r"\bmedianoche\b|\bmidnight\b", text, re.IGNORECASE):
-        return 0, 0
-    if re.search(r"\bmediodia\b|\bmediodía\b|\bnoon\b", text, re.IGNORECASE):
-        return 12, 0
+    # Patrón "a las N" / "las N" / "at N" sin am/pm
+    # Asumimos: 1-6 → pm (13-18), 7-12 → am (7-12), 13-23 → 24h
+    m = re.search(r"\b(?:a\s+las?|at)\s+(\d{1,2})\b", text, re.IGNORECASE)
+    if m:
+        h = int(m.group(1))
+        if 0 <= h <= 23:
+            # Heurística: 1–6 sin contexto = pm
+            if 1 <= h <= 6:
+                h += 12
+            return h, 0
 
     return None
 
