@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { toast } from "sonner";
 
 import { useWebSocket, getWsClient } from "@/hooks/useWebSocket";
 import { useThreads } from "@/hooks/useThreads";
@@ -27,6 +28,11 @@ export function useChat() {
         void loadThreads();
       } else if (event.type === "chat.error") {
         onError(event.session_id, event.detail);
+      } else if (event.type === "task.auto_created") {
+        toast.success(`✅ Tarea creada: ${event.title}`, {
+          description: `Programada: ${event.schedule}`,
+          duration: 5000,
+        });
       }
     },
     [onToken, onDone, onError, loadThreads],

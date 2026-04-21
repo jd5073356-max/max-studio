@@ -37,11 +37,19 @@ export type AgentStatusEvent = {
   metadata?: Record<string, unknown>;
 };
 
+export type TaskAutoCreatedEvent = {
+  type: "task.auto_created";
+  task_id: string;
+  title: string;
+  schedule: string; // e.g. "Lun, Mié · 09:00"
+};
+
 export type WsInboundEvent =
   | PongEvent
   | ChatTokenEvent
   | ChatDoneEvent
   | ChatErrorEvent
-  | AgentStatusEvent;
+  | AgentStatusEvent
+  | TaskAutoCreatedEvent;
 
 export type WsStatus = "connecting" | "connected" | "disconnected";

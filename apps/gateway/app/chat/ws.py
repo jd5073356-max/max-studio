@@ -9,6 +9,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.auth.jwt import InvalidToken, decode_token
 from app.chat.dispatcher import stream_response
+from app.chat.task_detector import detect_task
 from app.core.config import get_settings
 from app.core.supabase import SupabaseRest
 from app.core.ws_manager import manager
@@ -82,6 +83,28 @@ async def handle_chat_send(user_id: str, data: dict) -> None:
             "conversation_id": (assistant_row or {}).get("id", session_id),
         },
     )
+
+    # 5. Detectar intent de tarea programada en el mensaje del usuario
+    try:
+        task_data = await detect_task(content)
+        if task_data:
+            created = await sb.insert("scheduled_tasks", task_data)
+            task_id = (created or {}).get("id", str(uuid.uuid4()))
+            days_labels = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+            days_str = ", ".join(days_labels[d] for d in sorted(task_data["days"]))
+            h, m = task_data["hour"], task_data["minute"]
+            await manager.send(
+                user_id,
+                {
+                    "type": "task.auto_created",
+                    "task_id": task_id,
+                    "title": task_data["title"],
+                    "schedule": f"{days_str} · {h:02d}:{m:02d}",
+                },
+            )
+            logger.info("auto-task created user=%s title=%r", user_id, task_data["title"])
+    except Exception as exc:
+        logger.warning("auto-task detection failed user=%s: %s", user_id, exc)
 
 
 @router.websocket("/ws")
