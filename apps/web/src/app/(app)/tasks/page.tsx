@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Plus,
   RefreshCw,
@@ -11,15 +11,28 @@ import {
   Loader2,
   Clock,
   Zap,
+  FolderKanban,
+  FileDown,
+  Sparkles,
+  File,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { TaskForm } from "@/components/tasks/TaskForm";
 import { TaskTable } from "@/components/tasks/TaskTable";
 import { useTasks } from "@/hooks/useTasks";
+import { useWebSocket } from "@/hooks/useWebSocket";
 import { apiFetch } from "@/lib/api";
+import { getGatewayUrl } from "@/store/settings";
+import { getToken } from "@/store/auth";
 import { cn } from "@/lib/utils";
 import type { AgentJob, CreateTaskInput, Task } from "@/types/api";
+import type {
+  ProjectDoneEvent,
+  ProjectErrorEvent,
+  ProjectStepEvent,
+  WsInboundEvent,
+} from "@/types/ws-events";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -154,9 +167,212 @@ function JobsView() {
   );
 }
 
+// ── Modo Proyecto ─────────────────────────────────────────────────────────────
+
+type ProjectStep = {
+  step: number;
+  action: string;
+  label: string;
+  status: "running" | "done" | "error";
+  result?: string;
+};
+
+type ProjectState =
+  | { phase: "idle" }
+  | { phase: "running"; projectId: string; steps: ProjectStep[] }
+  | { phase: "done"; projectId: string; steps: ProjectStep[]; summary: string; files: ProjectDoneEvent["files"]; zipReady: boolean }
+  | { phase: "error"; detail: string };
+
+function ProjectView() {
+  const [prompt, setPrompt] = useState("");
+  const [state, setState] = useState<ProjectState>({ phase: "idle" });
+  const stepsRef = useRef<HTMLDivElement>(null);
+
+  const handleWsEvent = useCallback((event: WsInboundEvent) => {
+    if (event.type === "project.step") {
+      const e = event as ProjectStepEvent;
+      setState((s) => {
+        if (s.phase !== "running" || s.projectId !== e.project_id) return s;
+        const existing = s.steps.findIndex((x) => x.step === e.step);
+        const updated: ProjectStep = { step: e.step, action: e.action, label: e.label, status: e.status, result: e.result };
+        const steps = existing >= 0
+          ? s.steps.map((x, i) => i === existing ? updated : x)
+          : [...s.steps, updated];
+        return { ...s, steps };
+      });
+      // Auto-scroll
+      setTimeout(() => stepsRef.current?.scrollTo({ top: 9999, behavior: "smooth" }), 50);
+    }
+    if (event.type === "project.done") {
+      const e = event as ProjectDoneEvent;
+      setState((s) => {
+        if (s.phase !== "running" || s.projectId !== e.project_id) return s;
+        return { phase: "done", projectId: e.project_id, steps: s.steps, summary: e.summary, files: e.files, zipReady: e.zip_ready };
+      });
+    }
+    if (event.type === "project.error") {
+      const e = event as ProjectErrorEvent;
+      setState((s) => {
+        if (s.phase !== "running" || s.projectId !== e.project_id) return s;
+        return { phase: "error", detail: e.detail };
+      });
+    }
+  }, []);
+
+  useWebSocket(handleWsEvent);
+
+  const submit = async () => {
+    const text = prompt.trim();
+    if (!text || state.phase === "running") return;
+    setState({ phase: "running", projectId: "", steps: [] });
+    try {
+      const res = await apiFetch<{ project_id: string; message: string }>("/kimi/project", {
+        method: "POST",
+        body: { prompt: text },
+      });
+      setState({ phase: "running", projectId: res.project_id, steps: [] });
+    } catch (e) {
+      setState({ phase: "error", detail: e instanceof Error ? e.message : "Error al iniciar proyecto" });
+    }
+  };
+
+  const downloadUrl = (projectId: string) => {
+    const base = getGatewayUrl();
+    const token = getToken();
+    return `${base}/kimi/project/${projectId}/download${token ? `?token=${token}` : ""}`;
+  };
+
+  const reset = () => { setState({ phase: "idle" }); setPrompt(""); };
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      {/* Descripción */}
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium">Describe tu proyecto</span>
+          <span className="ml-auto text-[10px] text-muted-foreground">Kimi K2.6 · 300 sub-agentes</span>
+        </div>
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          rows={4}
+          disabled={state.phase === "running"}
+          placeholder={`Ej: "Crea 5 scripts Python para scraping de productos de MercadoLibre con distintas categorías. Incluye README y requirements.txt."`}
+          className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-50"
+        />
+        <div className="flex gap-2">
+          <Button
+            onClick={submit}
+            disabled={!prompt.trim() || state.phase === "running"}
+            className="gap-2"
+          >
+            {state.phase === "running"
+              ? <><Loader2 className="h-4 w-4 animate-spin" />Ejecutando…</>
+              : <><Sparkles className="h-4 w-4" />Iniciar proyecto</>}
+          </Button>
+          {state.phase !== "idle" && state.phase !== "running" && (
+            <Button variant="outline" onClick={reset}>Nuevo proyecto</Button>
+          )}
+        </div>
+      </div>
+
+      {/* Progress */}
+      {(state.phase === "running" || state.phase === "done") && (
+        <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <span className="text-xs font-medium">Progreso en tiempo real</span>
+            {state.phase === "running" && (
+              <span className="flex items-center gap-1 text-[10px] text-primary">
+                <Loader2 className="h-3 w-3 animate-spin" />Kimi trabajando…
+              </span>
+            )}
+            {state.phase === "done" && (
+              <span className="text-[10px] text-success flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" />Completado
+              </span>
+            )}
+          </div>
+          <div ref={stepsRef} className="max-h-64 overflow-y-auto divide-y divide-border">
+            {state.steps.length === 0 && (
+              <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />Planificando…
+              </div>
+            )}
+            {state.steps.map((step) => (
+              <div key={step.step} className="flex items-start gap-3 px-4 py-2.5">
+                <div className="mt-0.5 shrink-0">
+                  {step.status === "running" && <Loader2 className="h-3.5 w-3.5 animate-spin text-info" />}
+                  {step.status === "done" && <CheckCircle2 className="h-3.5 w-3.5 text-success" />}
+                  {step.status === "error" && <XCircle className="h-3.5 w-3.5 text-destructive" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <File className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <span className="text-xs font-medium truncate">{step.label}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{step.action}</span>
+                  </div>
+                  {step.result && (
+                    <p className="mt-0.5 text-[10px] text-muted-foreground font-mono truncate">{step.result}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Resultado final */}
+      {state.phase === "done" && (
+        <div className="rounded-lg border border-success/30 bg-success/5 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-success">
+              ✅ {state.files.length} archivo{state.files.length !== 1 ? "s" : ""} generado{state.files.length !== 1 ? "s" : ""}
+            </span>
+            {state.zipReady && (
+              <a href={downloadUrl(state.projectId)} download>
+                <Button size="sm" className="gap-1.5 h-7 text-xs">
+                  <FileDown className="h-3.5 w-3.5" />Descargar ZIP
+                </Button>
+              </a>
+            )}
+          </div>
+
+          {/* Lista de archivos */}
+          <ul className="space-y-1">
+            {state.files.map((f) => (
+              <li key={f.filename} className="flex items-center gap-2 text-xs text-muted-foreground">
+                <File className="h-3 w-3 shrink-0" />
+                <span className="font-mono">{f.filename}</span>
+                <span className="text-[10px]">· {(f.size / 1024).toFixed(1)} KB</span>
+                {f.description && <span className="text-[10px] truncate">— {f.description}</span>}
+              </li>
+            ))}
+          </ul>
+
+          {/* Resumen de Kimi */}
+          {state.summary && (
+            <div className="rounded-md bg-background border border-border p-3 text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
+              {state.summary}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Error */}
+      {state.phase === "error" && (
+        <div className="rounded-md bg-destructive/10 border border-destructive/20 px-4 py-3">
+          <p className="text-xs text-destructive font-medium">Error</p>
+          <p className="text-xs text-destructive/80 mt-0.5">{state.detail}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type Tab = "scheduled" | "jobs";
+type Tab = "scheduled" | "jobs" | "project";
 
 export default function TasksPage() {
   const {
@@ -259,6 +475,20 @@ export default function TasksPage() {
           <Zap className="h-3.5 w-3.5" />
           Historial de jobs
         </button>
+        <button
+          type="button"
+          onClick={() => setTab("project")}
+          className={cn(
+            "ml-4 flex items-center gap-1.5 border-b-2 px-1 pb-2 pt-2.5 text-xs font-medium transition-colors",
+            tab === "project"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <FolderKanban className="h-3.5 w-3.5" />
+          Proyecto
+          <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] text-primary font-bold">K2.6</span>
+        </button>
       </div>
 
       {/* Content */}
@@ -281,6 +511,7 @@ export default function TasksPage() {
           </>
         )}
         {tab === "jobs" && <JobsView />}
+        {tab === "project" && <ProjectView />}
       </div>
 
       <TaskForm

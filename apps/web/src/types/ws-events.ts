@@ -44,12 +44,40 @@ export type TaskAutoCreatedEvent = {
   schedule: string; // e.g. "Lun, Mié · 09:00"
 };
 
+export type ProjectStepEvent = {
+  type: "project.step";
+  project_id: string;
+  step: number;
+  action: "create_file" | "run_code" | string;
+  label: string;
+  status: "running" | "done" | "error";
+  result?: string;
+};
+
+export type ProjectDoneEvent = {
+  type: "project.done";
+  project_id: string;
+  summary: string;
+  files: Array<{ filename: string; size: number; description: string }>;
+  zip_ready: boolean;
+  rounds: number;
+};
+
+export type ProjectErrorEvent = {
+  type: "project.error";
+  project_id: string;
+  detail: string;
+};
+
 export type WsInboundEvent =
   | PongEvent
   | ChatTokenEvent
   | ChatDoneEvent
   | ChatErrorEvent
   | AgentStatusEvent
-  | TaskAutoCreatedEvent;
+  | TaskAutoCreatedEvent
+  | ProjectStepEvent
+  | ProjectDoneEvent
+  | ProjectErrorEvent;
 
 export type WsStatus = "connecting" | "connected" | "disconnected";
