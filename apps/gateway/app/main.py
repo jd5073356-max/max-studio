@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.routes import router as auth_router
+from app.kimi.routes import router as kimi_router
 from app.chat.routes import router as chat_router
 from app.chat.ws import router as ws_router
 from app.core.config import get_settings
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(memory_router)
     app.include_router(push_router)
     app.include_router(sandbox_router)
+    app.include_router(kimi_router)
 
     return app
 

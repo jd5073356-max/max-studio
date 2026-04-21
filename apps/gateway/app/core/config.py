@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(default="", description="API key Anthropic")
     default_model: str = Field(default="claude-sonnet-4-6", description="Modelo por defecto")
 
+    # Kimi K2.6 (Moonshot AI)
+    moonshot_api_key: str = Field(default="", description="API key Moonshot AI (Kimi)")
+    moonshot_model: str = Field(default="kimi-k2", description="Modelo Kimi para visión")
+
     # Secretos compartidos
     agent_api_key: str = Field(default="change-me-agent-key")
     internal_api_key: str = Field(default="change-me-internal-key")

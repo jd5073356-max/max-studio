@@ -31,6 +31,7 @@ type ChatStore = {
   setMessages: (msgs: ChatMessage[]) => void;
   setThreads: (threads: ChatThread[]) => void;
   setActiveThread: (id: string | null) => void;
+  setLoading: (v: boolean) => void;
   startNewThread: () => void;
 
   addUserMessage: (content: string) => void;
@@ -49,6 +50,7 @@ export const useChatStore = create<ChatStore>((set) => ({
   setMessages: (messages) => set({ messages }),
   setThreads: (threads) => set({ threads }),
   setActiveThread: (activeThreadId) => set({ activeThreadId }),
+  setLoading: (isLoading) => set({ isLoading }),
 
   startNewThread: () =>
     set({

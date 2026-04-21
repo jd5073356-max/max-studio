@@ -57,7 +57,7 @@ function MobileChatBar() {
 }
 
 export function ChatWindow() {
-  const { sendMessage, loadHistory, isLoading } = useChat();
+  const { sendMessage, sendVision, loadHistory, isLoading } = useChat();
 
   useEffect(() => {
     loadHistory();
@@ -73,7 +73,11 @@ export function ChatWindow() {
         <MobileChatBar />
 
         <MessageList />
-        <MessageInput onSend={sendMessage} disabled={isLoading} />
+        <MessageInput
+          onSend={sendMessage}
+          onSendWithImage={sendVision}
+          disabled={isLoading}
+        />
       </div>
     </div>
   );

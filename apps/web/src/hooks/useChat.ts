@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useWebSocket, getWsClient } from "@/hooks/useWebSocket";
 import { useThreads } from "@/hooks/useThreads";
 import { useChatStore } from "@/store/chat";
+import { apiFetch } from "@/lib/api";
 import type { WsInboundEvent } from "@/types/ws-events";
 
 export function useChat() {
@@ -58,5 +59,27 @@ export function useChat() {
     [addUserMessage, isLoading],
   );
 
-  return { sendMessage, loadHistory, openThread, newThread, isLoading };
+  const sendVision = useCallback(
+    async (content: string, imageBase64: string, mimeType: string) => {
+      if (isLoading) return;
+      const text = content.trim() || "Analiza esta imagen";
+      addUserMessage(text);
+      const sessionId = crypto.randomUUID();
+      try {
+        const result = await apiFetch<{ content: string; model: string }>("/vision/analyze", {
+          method: "POST",
+          body: { message: text, image_base64: imageBase64, mime_type: mimeType },
+        });
+        // Simula el patrón token→done para que el store lo maneje igual
+        onToken(sessionId, result.content);
+        onDone(sessionId, result.model, `vision-${Date.now()}`);
+        void loadThreads();
+      } catch (e) {
+        onError(sessionId, e instanceof Error ? e.message : "Error al analizar imagen");
+      }
+    },
+    [isLoading, addUserMessage, onToken, onDone, onError, loadThreads],
+  );
+
+  return { sendMessage, sendVision, loadHistory, openThread, newThread, isLoading };
 }
