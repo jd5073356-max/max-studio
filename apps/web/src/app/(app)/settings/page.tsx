@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Loader2, Moon, Sun, XCircle } from "lucide-react";
+import { CheckCircle2, Cpu, Loader2, Moon, Sun, XCircle, Zap } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -11,7 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PushToggle } from "@/components/pwa/PushToggle";
 import { logout, me } from "@/lib/auth-client";
+import { apiFetch } from "@/lib/api";
 import { useSettingsStore, getGatewayUrl } from "@/store/settings";
+import { cn } from "@/lib/utils";
 
 // ── Sección visual ────────────────────────────────────────────────────────────
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -201,14 +203,113 @@ function AccountSection() {
   );
 }
 
+// ── Modelos IA ────────────────────────────────────────────────────────────────
+type ModelInfo = {
+  id: string;
+  name: string;
+  provider: string;
+  role: string;
+  status: string;
+  via: string;
+};
+
+const STATUS_DOT: Record<string, string> = {
+  online: "bg-success",
+  configured: "bg-success",
+  not_configured: "bg-muted-foreground",
+  offline: "bg-destructive",
+  degraded: "bg-warning",
+  error: "bg-destructive",
+};
+
+function ModelsSection() {
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [defaultModel, setDefaultModel] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiFetch<{ models: ModelInfo[]; default_model: string; kimi_model: string }>("/system/models")
+      .then((d) => { setModels(d.models); setDefaultModel(d.default_model); })
+      .catch(() => null)
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <Section title="Modelos IA">
+      {loading ? (
+        <div className="flex justify-center py-4">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {models.map((m) => (
+            <div key={m.id} className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_DOT[m.status] ?? "bg-muted-foreground")} />
+                <div className="min-w-0">
+                  <p className="text-xs font-medium truncate">{m.name}</p>
+                  <p className="text-[10px] text-muted-foreground">{m.role} · {m.via}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[10px] text-muted-foreground">{m.provider}</span>
+                {m.status === "not_configured" && (
+                  <span className="rounded border border-warning/40 px-1.5 py-0.5 text-[9px] text-warning">No conf.</span>
+                )}
+              </div>
+            </div>
+          ))}
+          {defaultModel && (
+            <p className="text-[10px] text-muted-foreground pt-1">
+              Modelo por defecto: <span className="font-mono">{defaultModel}</span>
+            </p>
+          )}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+// ── Acerca de ─────────────────────────────────────────────────────────────────
+function AboutSection() {
+  return (
+    <Section title="Acerca de MAX Studio">
+      <div className="space-y-1.5 text-xs text-muted-foreground">
+        <div className="flex justify-between">
+          <span>Versión</span>
+          <span className="font-mono">0.1.0</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Stack IA</span>
+          <span>gpt-120 · Kimi K2.6 · Claude</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Frontend</span>
+          <span>Next.js 16 · Tailwind v4</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Backend</span>
+          <span>FastAPI · Supabase · EC2</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Build</span>
+          <span className="text-success">✅ Todas las fases completadas</span>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-lg space-y-4 p-4 md:p-6">
       <ConnectionSection />
+      <ModelsSection />
       <AppearanceSection />
       <NotificationsSection />
       <AccountSection />
+      <AboutSection />
     </div>
   );
 }

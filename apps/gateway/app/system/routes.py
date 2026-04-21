@@ -145,3 +145,50 @@ async def get_status(
             "checked_at": datetime.now(timezone.utc).isoformat(),
         },
     }
+
+
+@router.get("/models")
+async def get_models(settings: SettingsDep, _user: CurrentUser) -> dict:
+    """Devuelve el stack de modelos IA configurados y su estado."""
+    dispatch_ping = await _ping_service("dispatch", settings.dispatch_url)
+
+    models = [
+        {
+            "id": "gpt-oss-120b",
+            "name": "gpt-oss:120b",
+            "provider": "Ollama (EC2)",
+            "role": "Chat principal",
+            "status": dispatch_ping["status"],
+            "via": "Dispatch",
+        },
+        {
+            "id": "kimi-k2",
+            "name": "Kimi K2.6",
+            "provider": "Moonshot AI",
+            "role": "Vision · Docs · Proyectos",
+            "status": "configured" if settings.moonshot_api_key else "not_configured",
+            "via": "API directa",
+        },
+        {
+            "id": "kimi-k25",
+            "name": "kimi-k2.5",
+            "provider": "Ollama (EC2)",
+            "role": "Fallback calidad",
+            "status": dispatch_ping["status"],
+            "via": "Dispatch",
+        },
+        {
+            "id": "claude-sonnet",
+            "name": "Claude Sonnet 4.6",
+            "provider": "Anthropic",
+            "role": "Fallback nube",
+            "status": "configured" if settings.anthropic_api_key else "not_configured",
+            "via": "API directa",
+        },
+    ]
+
+    return {
+        "models": models,
+        "default_model": settings.default_model,
+        "kimi_model": settings.moonshot_model,
+    }
