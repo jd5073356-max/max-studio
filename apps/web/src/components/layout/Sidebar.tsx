@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  LineChart,
   FileText,
   MessageSquare,
   Brain,
@@ -29,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/memory/conversations", label: "Memoria", icon: Brain, matchPrefix: "/memory" },
   { href: "/memory/obsidian", label: "Obsidian", icon: BookMarked },
   { href: "/docs", label: "Documentos", icon: FileText },
+  { href: "/finances", label: "Finanzas", icon: LineChart },
   { href: "/settings", label: "Ajustes", icon: Settings },
 ];
 
