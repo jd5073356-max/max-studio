@@ -27,3 +27,8 @@ docker==7.*
 # NOTA: no usamos supabase-py por incompatibilidad de pyiceberg con Python 3.14.
 # Accedemos a Supabase vía REST (PostgREST) con httpx directo.
 # Si en el futuro se necesita supabase-py, instalar Python 3.12 en paralelo.
+
+# --- Step 15 (finance integration) ---
+yfinance==0.2.*
+pandas
+
