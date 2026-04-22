@@ -7,6 +7,7 @@ import {
   FileText,
   MessageSquare,
   Brain,
+  BookMarked,
   Settings,
   Sparkles,
   CalendarClock,
@@ -26,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/tasks", label: "Tareas", icon: CalendarClock, matchPrefix: "/tasks" },
   { href: "/system", label: "Sistema", icon: Activity },
   { href: "/memory/conversations", label: "Memoria", icon: Brain, matchPrefix: "/memory" },
+  { href: "/memory/obsidian", label: "Obsidian", icon: BookMarked },
   { href: "/docs", label: "Documentos", icon: FileText },
   { href: "/settings", label: "Ajustes", icon: Settings },
 ];

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Cpu, Loader2, Moon, Sun, XCircle, Zap } from "lucide-react";
+import { BookOpen, CheckCircle2, Cpu, Loader2, Moon, RefreshCw, Sun, XCircle, Zap } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -270,6 +270,74 @@ function ModelsSection() {
   );
 }
 
+// ── Contexto MAX (CLAUDE.md + Obsidian) ──────────────────────────────────────
+function ContextSection() {
+  const [info, setInfo] = useState<{ chars: number; synced_at: string | null; content: string | null } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+
+  const load = () =>
+    apiFetch<typeof info>("/context/claude-md")
+      .then(setInfo)
+      .catch(() => null)
+      .finally(() => setLoading(false));
+
+  useEffect(() => { void load(); }, []);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await apiFetch("/context/sync", { method: "POST" });
+      toast.success("Sincronización enviada al agente local");
+      setTimeout(() => void load(), 3000);
+    } catch {
+      toast.error("El agente no está disponible");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <Section title="Contexto MAX">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BookOpen className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">CLAUDE.md</p>
+              <p className="text-xs text-muted-foreground">
+                {loading
+                  ? "Cargando…"
+                  : info?.chars
+                  ? `${info.chars.toLocaleString()} chars · ${info.synced_at ? new Date(info.synced_at).toLocaleDateString("es", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "?"}`
+                  : "No sincronizado"}
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSync}
+            disabled={syncing}
+            className="gap-1.5"
+          >
+            {syncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            Sincronizar
+          </Button>
+        </div>
+        {info?.content && (
+          <pre className="rounded-md bg-muted/40 p-2 text-[10px] leading-relaxed text-muted-foreground overflow-hidden max-h-24 line-clamp-6 whitespace-pre-wrap">
+            {info.content.slice(0, 300)}…
+          </pre>
+        )}
+        <p className="text-[10px] text-muted-foreground">
+          Agent.py sincroniza automáticamente cada 30 min. El botón fuerza una re-sincronización.
+        </p>
+      </div>
+    </Section>
+  );
+}
+
 // ── Acerca de ─────────────────────────────────────────────────────────────────
 function AboutSection() {
   return (
@@ -306,6 +374,7 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-lg space-y-4 p-4 md:p-6">
       <ConnectionSection />
       <ModelsSection />
+      <ContextSection />
       <AppearanceSection />
       <NotificationsSection />
       <AccountSection />
