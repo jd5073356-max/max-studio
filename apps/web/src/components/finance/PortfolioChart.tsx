@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { format } from "date-fns";
 
 interface ChartDataPoint {
   date: string;
@@ -41,7 +40,7 @@ export function PortfolioChart({ data, color = "#a855f7" }: PortfolioChartProps)
             dataKey="timestamp" 
             type="number"
             domain={['dataMin', 'dataMax']}
-            tickFormatter={(val) => format(new Date(val), "MMM dd")}
+            tickFormatter={(val) => new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit" }).format(new Date(val))}
             stroke="#52525b" 
             tick={{ fill: '#71717a', fontSize: 12 }} 
             axisLine={false} 
@@ -58,7 +57,7 @@ export function PortfolioChart({ data, color = "#a855f7" }: PortfolioChartProps)
                 const date = new Date(payload[0].payload.timestamp);
                 return (
                   <div className="rounded-lg border border-white/10 bg-neutral-900/90 p-3 shadow-xl backdrop-blur-md">
-                    <p className="text-sm font-medium text-zinc-400">{format(date, "MMM dd, yyyy")}</p>
+                    <p className="text-sm font-medium text-zinc-400">{new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit", year: "numeric" }).format(date)}</p>
                     <p className="mt-1 text-lg font-bold text-white">
                       ${Number(payload[0].value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
