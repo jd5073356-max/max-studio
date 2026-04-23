@@ -108,3 +108,18 @@ export function getAccounts() {
 export function getSnapshots() {
   return query<FinanceSnapshot>("finance_monthly_snapshots", "order=month.asc");
 }
+
+export interface FinanceLedgerEntry {
+  id: string;
+  entity_id: string;
+  entity_type: string;
+  amount: number;
+  currency: string;
+  recorded_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export function getEntityHistory(entityId: string, entityType: string, period?: string) {
+  const params = `entity_id=eq.${entityId}&entity_type=eq.${entityType}&order=recorded_at.asc`;
+  return query<FinanceLedgerEntry>("finance_ledger", params);
+}
