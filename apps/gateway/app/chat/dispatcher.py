@@ -41,32 +41,36 @@ _claude_md_cache: dict = {"content": "", "ts": 0.0}
 _finance_cache: dict = {"state": {}, "ts": 0.0}
 _CACHE_TTL = 600  # segundos
 
-FINANCE_TOOLS_PROMPT = """
-## Finance Hub — Herramientas disponibles
+_FINANCE_KEYWORDS = (
+    "gasto", "ingreso", "cuenta", "balance", "saldo", "proyecto", "presupuesto",
+    "dinero", "plata", "ahorro", "préstamo", "prestamo", "pago", "cobro",
+    "finance", "finanza", "actualiza", "agrega", "quita", "registra", "elimina",
+    "autoflow", "casaflow", "restaurante", "spotify", "computador", "pasaje",
+    "deuda", "inversión", "inversion", "cuánto tengo", "cuanto tengo",
+)
 
-Tienes acceso en tiempo real a los datos financieros de Juan David.
-Puedes consultarlos, analizarlos y modificarlos.
+# Instrucciones compactas que se inyectan en el mensaje cuando hay contexto finance
+_FINANCE_INJECT_TEMPLATE = """[SISTEMA: FINANCE HUB ACTIVO]
+Datos financieros actuales de Juan David:
+{finance_lines}
 
-### Estado actual:
-{finance_state}
-
-### Cómo actualizar datos
-Si el usuario pide actualizar sus finanzas, incluye al FINAL de tu respuesta un bloque como este (el sistema lo ejecuta automáticamente, el usuario NO lo ve):
+INSTRUCCIÓN CRÍTICA: Si el usuario pide agregar, quitar o actualizar datos financieros, incluye OBLIGATORIAMENTE al final de tu respuesta un bloque así (el sistema lo ejecuta en silencio, el usuario NO lo ve):
 
 ```finance_action
-{{"action": "update_account", "payload": {{"id": "<uuid>", "balance": <nuevo_saldo>}}}}
+{{"action": "<accion>", "payload": {{...}}}}
 ```
 
-Acciones disponibles:
-- `update_account` → {{"id": "uuid", "balance": 560000, "institution": "opcional"}}
-- `update_project` → {{"id": "uuid", "monthly_income": 150000, "status": "active"}}
-- `add_ledger` → {{"entity_id": "uuid", "entity_type": "account|project|category", "amount": 70000, "recorded_at": "2026-04-23"}}
-- `update_expense_category` → {{"id": "uuid", "budget_limit": 200000}}
+Acciones disponibles (elige la correcta):
+- update_account → payload: {{"id":"<uuid>","balance":<número>}}
+- update_project → payload: {{"id":"<uuid>","monthly_income":<número>,"status":"active|pending"}}
+- create_expense_category → payload: {{"name":"<nombre>","budget_limit":<número>,"color":"#hex"}}
+- update_expense_category → payload: {{"id":"<uuid>","budget_limit":<número>}}
+- add_ledger → payload: {{"entity_id":"<uuid>","entity_type":"account|project|category","amount":<número>,"currency":"COP","note":"<descripcion>"}}
 
-Reglas:
-- Solo incluye el bloque `finance_action` si el usuario pide explícitamente cambiar o registrar datos.
-- Para análisis y opiniones, responde normalmente sin el bloque.
-- Puedes incluir múltiples bloques si se necesitan varios cambios.
+REGLA: Si debes hacer varios cambios, pon VARIOS bloques finance_action, uno por acción. No expliques el bloque al usuario.
+[FIN SISTEMA]
+
+MENSAJE DEL USUARIO:
 """
 
 
@@ -91,8 +95,8 @@ async def _get_claude_md_context() -> str:
     return _claude_md_cache["content"]
 
 
-async def _get_finance_context() -> str:
-    """Obtiene estado financiero con cache de 10 min."""
+async def _get_finance_lines() -> list[str]:
+    """Retorna líneas de estado financiero con cache de 10 min."""
     now = time.monotonic()
     if now - _finance_cache["ts"] < _CACHE_TTL and _finance_cache["state"]:
         state = _finance_cache["state"]
@@ -104,23 +108,42 @@ async def _get_finance_context() -> str:
         except Exception:
             state = {}
 
-    if not state:
-        return ""
-
     lines = []
     for acc in state.get("accounts", []):
-        lines.append(f"- Cuenta '{acc['name']}' ({acc['account_type']}): ${acc['balance']:,.0f} COP [id:{acc['id']}]")
+        lines.append(f"- Cuenta '{acc['name']}' ({acc['account_type']}): ${float(acc['balance']):,.0f} COP [id:{acc['id']}]")
     for p in state.get("projects", []):
         meta = p.get("metadata") or {}
-        lines.append(f"- Proyecto '{p['name']}' ({p['status']}): ${p['monthly_income']:,.0f} COP/mes [id:{p['id']}] meta:{meta.get('meta_mensual',0):,.0f}")
+        lines.append(f"- Proyecto '{p['name']}' ({p['status']}): ${float(p['monthly_income']):,.0f} COP/mes [id:{p['id']}] meta_mensual:{meta.get('meta_mensual',0):,.0f}")
     for c in state.get("categories", []):
-        lines.append(f"- Gasto '{c['name']}': presupuesto ${c['budget_limit']:,.0f} COP [id:{c['id']}]")
+        lines.append(f"- Categoria gasto '{c['name']}': presupuesto ${float(c['budget_limit']):,.0f} COP [id:{c['id']}]")
+    return lines
 
-    return FINANCE_TOOLS_PROMPT.format(finance_state="\n".join(lines))
+
+def _is_finance_message(content: str) -> bool:
+    low = content.lower()
+    return any(kw in low for kw in _FINANCE_KEYWORDS)
+
+
+async def _enrich_with_finance(content: str) -> str:
+    """Si el mensaje es de finanzas, antepone el contexto con instrucciones."""
+    if not _is_finance_message(content):
+        return content
+    lines = await _get_finance_lines()
+    if not lines:
+        return content
+    return _FINANCE_INJECT_TEMPLATE.format(finance_lines="\n".join(lines)) + content
+
+
+async def _get_finance_context() -> str:
+    """Para system prompt (fallback Anthropic)."""
+    lines = await _get_finance_lines()
+    if not lines:
+        return ""
+    return "## Finance Hub\n" + "\n".join(lines)
 
 
 async def _build_system_prompt() -> str:
-    """Construye el system prompt enriquecido con CLAUDE.md y finanzas."""
+    """Construye el system prompt para fallback Anthropic."""
     ctx = await _get_claude_md_context()
     finance_ctx = await _get_finance_context()
     prompt = BASE_SYSTEM_PROMPT
@@ -148,6 +171,7 @@ def _create_dispatch_token(secret: str) -> str:
 async def _via_dispatch(content: str, settings) -> AsyncGenerator[str, None]:
     """Llama a Dispatch y simula streaming por palabras."""
     token = _create_dispatch_token(settings.dispatch_secret)
+    enriched = await _enrich_with_finance(content)
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(
@@ -156,7 +180,7 @@ async def _via_dispatch(content: str, settings) -> AsyncGenerator[str, None]:
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
             },
-            json={"message": content},
+            json={"message": enriched},
         )
 
     if resp.status_code != 200:

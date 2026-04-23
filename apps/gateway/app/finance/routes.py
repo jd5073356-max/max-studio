@@ -53,6 +53,10 @@ async def execute_finance_action(req: FinanceActionRequest):
         return {"ok": True, "action": action, "id": project_id}
 
     elif action == "add_ledger":
+        # Mapear "note" → "metadata" si viene del modelo
+        if "note" in p:
+            p.setdefault("metadata", {})["note"] = p.pop("note")
+        p.setdefault("currency", "COP")
         await sb.insert("finance_ledger", p, returning=False)
         return {"ok": True, "action": action}
 
