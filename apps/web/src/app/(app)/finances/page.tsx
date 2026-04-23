@@ -49,7 +49,7 @@ export default function FinancesPage() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [selectedAsset, setSelectedAsset] = useState<string>("BTC-USD");
   const [selectedPeriod, setSelectedPeriod] = useState<string>("1mo");
-  const [displayCurrency, setDisplayCurrency] = useState<"USD" | "COP">("USD");
+  const [displayCurrency, setDisplayCurrency] = useState<"USD" | "COP">("COP");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState<PersonalSection>(null);
   const [selectedSubEntity, setSelectedSubEntity] = useState<{id: string, type: string, name: string} | null>(null);
@@ -211,14 +211,16 @@ export default function FinancesPage() {
 
   const portfolioValue = totalLiquidity; // Ahora es solo lo que hay en cuentas reales
 
-  const conversionRate = displayCurrency === "COP" ? (quotes["COP=X"]?.price || 3900) : 1;
+  // Data is stored in COP. COP=X gives how many COP per 1 USD.
+  const copPerUsd = quotes["COP=X"]?.price || 4000;
+  const conversionRate = displayCurrency === "USD" ? (1 / copPerUsd) : 1;
 
   const formatPrice = (val: number) => {
     const converted = val * conversionRate;
-    if (displayCurrency === "COP") {
-      return `$${converted.toLocaleString("es-CO", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} COP`;
+    if (displayCurrency === "USD") {
+      return `$${converted.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
     }
-    return `$${converted.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `$${converted.toLocaleString("es-CO", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} COP`;
   };
 
   return (
@@ -237,17 +239,17 @@ export default function FinancesPage() {
         <div className="flex items-center gap-3">
           {/* Currency Toggle */}
           <div className="flex items-center rounded-full bg-white/5 border border-white/5 p-1 backdrop-blur-md">
-            <button 
-              onClick={() => setDisplayCurrency("USD")}
-              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${displayCurrency === "USD" ? "bg-white/10 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
-            >
-              USD
-            </button>
-            <button 
+            <button
               onClick={() => setDisplayCurrency("COP")}
               className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${displayCurrency === "COP" ? "bg-white/10 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
             >
               COP
+            </button>
+            <button
+              onClick={() => setDisplayCurrency("USD")}
+              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${displayCurrency === "USD" ? "bg-white/10 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
+            >
+              USD
             </button>
           </div>
           
