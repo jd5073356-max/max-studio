@@ -38,18 +38,20 @@ export default function FinancesPage() {
         
         const newQuotes: Record<string, QuoteData> = {};
         results.forEach((res, index) => {
-          if (res && res.price) {
+          const data = res as QuoteData;
+          if (data && data.price !== undefined) {
             newQuotes[ASSETS[index].symbol] = {
-              price: res.price,
-              changePercent: res.changePercent
+              price: data.price,
+              changePercent: data.changePercent
             };
           }
         });
         setQuotes(newQuotes);
 
         const histRes = await apiFetch("/finance/history/BTC-USD?period=1mo");
-        if (histRes && histRes.history) {
-          setHistory(histRes.history);
+        const histData = histRes as { history?: HistoryData[] };
+        if (histData && histData.history) {
+          setHistory(histData.history);
         }
       } catch (err) {
         console.error("Failed to load finance data:", err);
