@@ -1,9 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { ArrowRight, Lock, Send, ArrowLeftRight, Activity, DollarSign, Wallet, CreditCard, Building2, Briefcase } from "lucide-react";
 import { AssetCard } from "@/components/finance/AssetCard";
 import { PortfolioChart } from "@/components/finance/PortfolioChart";
+
+// Datos simulados de tendencia mensual para cada seccion personal
+type PersonalSection = "proyectos" | "gastos" | "liquidez" | null;
+
+const SECTION_LABELS: Record<string, string> = {
+  proyectos: "Ingresos Mensuales",
+  gastos: "Gastos Mensuales",
+  liquidez: "Liquidez Disponible",
+};
+
+const SECTION_COLORS: Record<string, string> = {
+  proyectos: "#34d399",
+  gastos: "#f43f5e",
+  liquidez: "#60a5fa",
+};
+
+// Genera datos simulados de los ultimos 6 meses
+function generateMockHistory(section: string): { date: string; close: number }[] {
+  const now = new Date();
+  const points: { date: string; close: number }[] = [];
+
+  const baselines: Record<string, number[]> = {
+    proyectos: [3200, 3500, 3800, 4100, 4200, 4500],
+    gastos:    [1800, 1500, 1900, 1600, 1400, 1200],
+    liquidez:  [5000, 5500, 6200, 7000, 7800, 8500],
+  };
+
+  const values = baselines[section] || baselines.liquidez;
+
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+    points.push({
+      date: d.toISOString().split("T")[0],
+      close: values[i],
+    });
+  }
+  return points;
+}
 
 const ASSETS = [
   { symbol: "BTC-USD", name: "Bitcoin" },
@@ -32,6 +70,12 @@ export default function FinancesPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<string>("1mo");
   const [displayCurrency, setDisplayCurrency] = useState<"USD" | "COP">("USD");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [selectedSection, setSelectedSection] = useState<PersonalSection>(null);
+
+  const personalChartData = useMemo(() => {
+    if (!selectedSection) return [];
+    return generateMockHistory(selectedSection);
+  }, [selectedSection]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -240,7 +284,12 @@ export default function FinancesPage() {
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
           
           {/* Ingresos & Proyectos */}
-          <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-6 backdrop-blur-2xl xl:col-span-1">
+          <div 
+            onClick={() => setSelectedSection(selectedSection === "proyectos" ? null : "proyectos")}
+            className={`rounded-3xl border bg-white/[0.02] p-6 backdrop-blur-2xl xl:col-span-1 cursor-pointer transition-all hover:bg-white/[0.04] ${
+              selectedSection === "proyectos" ? "border-emerald-500/50 ring-1 ring-emerald-500/30" : "border-white/5"
+            }`}
+          >
             <div className="flex items-center gap-3 mb-6">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
                 <Briefcase className="h-5 w-5" />
@@ -281,7 +330,12 @@ export default function FinancesPage() {
           </div>
 
           {/* Gastos y Presupuesto (Barras de progreso) */}
-          <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-6 backdrop-blur-2xl xl:col-span-1">
+          <div 
+            onClick={() => setSelectedSection(selectedSection === "gastos" ? null : "gastos")}
+            className={`rounded-3xl border bg-white/[0.02] p-6 backdrop-blur-2xl xl:col-span-1 cursor-pointer transition-all hover:bg-white/[0.04] ${
+              selectedSection === "gastos" ? "border-rose-500/50 ring-1 ring-rose-500/30" : "border-white/5"
+            }`}
+          >
             <div className="flex items-center gap-3 mb-6">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-500/20 text-rose-400">
                 <CreditCard className="h-5 w-5" />
@@ -333,7 +387,12 @@ export default function FinancesPage() {
           </div>
 
           {/* Liquidez / Cuentas */}
-          <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-6 backdrop-blur-2xl xl:col-span-1">
+          <div 
+            onClick={() => setSelectedSection(selectedSection === "liquidez" ? null : "liquidez")}
+            className={`rounded-3xl border bg-white/[0.02] p-6 backdrop-blur-2xl xl:col-span-1 cursor-pointer transition-all hover:bg-white/[0.04] ${
+              selectedSection === "liquidez" ? "border-blue-500/50 ring-1 ring-blue-500/30" : "border-white/5"
+            }`}
+          >
             <div className="flex items-center gap-3 mb-6">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/20 text-blue-400">
                 <Wallet className="h-5 w-5" />
@@ -368,6 +427,28 @@ export default function FinancesPage() {
           </div>
           
         </div>
+
+        {/* Grafica de la seccion seleccionada */}
+        {selectedSection && (
+          <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-6 backdrop-blur-2xl mt-6">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">
+                {SECTION_LABELS[selectedSection]} - Tendencia 6 Meses
+              </h3>
+              <button 
+                onClick={() => setSelectedSection(null)}
+                className="text-xs text-zinc-400 hover:text-white transition-colors rounded-full bg-white/5 px-3 py-1"
+              >
+                Cerrar
+              </button>
+            </div>
+            <PortfolioChart 
+              data={personalChartData} 
+              color={SECTION_COLORS[selectedSection]} 
+              formatPrice={formatPrice} 
+            />
+          </div>
+        )}
       </div>
 
     </div>
