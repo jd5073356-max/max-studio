@@ -10,9 +10,10 @@ interface AssetCardProps {
   marketCap?: string;
   icon?: ReactNode;
   onClick?: () => void;
+  formatPrice?: (value: number) => string;
 }
 
-export function AssetCard({ name, symbol, price, changePercent, marketCap, icon, onClick }: AssetCardProps) {
+export function AssetCard({ name, symbol, price, changePercent, marketCap, icon, onClick, formatPrice }: AssetCardProps) {
   const isPositive = changePercent >= 0;
   
   return (
@@ -40,7 +41,9 @@ export function AssetCard({ name, symbol, price, changePercent, marketCap, icon,
       
       <div className="mt-6 flex items-end justify-between">
         <div className="text-2xl font-bold tracking-tight text-white">
-          ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          {formatPrice 
+            ? formatPrice(price)
+            : `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
         </div>
         <div className={cn(
           "flex items-center gap-1 text-sm font-medium px-2 py-0.5 rounded-full",

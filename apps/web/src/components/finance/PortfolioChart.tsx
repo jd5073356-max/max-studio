@@ -11,9 +11,10 @@ interface ChartDataPoint {
 interface PortfolioChartProps {
   data: ChartDataPoint[];
   color?: string;
+  formatPrice?: (value: number) => string;
 }
 
-export function PortfolioChart({ data, color = "#a855f7" }: PortfolioChartProps) {
+export function PortfolioChart({ data, color = "#a855f7", formatPrice }: PortfolioChartProps) {
   const chartData = useMemo(() => {
     return data.map((d) => ({
       ...d,
@@ -59,7 +60,9 @@ export function PortfolioChart({ data, color = "#a855f7" }: PortfolioChartProps)
                   <div className="rounded-lg border border-white/10 bg-neutral-900/90 p-3 shadow-xl backdrop-blur-md">
                     <p className="text-sm font-medium text-zinc-400">{new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit", year: "numeric" }).format(date)}</p>
                     <p className="mt-1 text-lg font-bold text-white">
-                      ${Number(payload[0].value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {formatPrice 
+                        ? formatPrice(Number(payload[0].value)) 
+                        : `$${Number(payload[0].value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     </p>
                   </div>
                 );
