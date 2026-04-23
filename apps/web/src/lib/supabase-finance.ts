@@ -123,3 +123,18 @@ export function getEntityHistory(entityId: string, entityType: string, period?: 
   const params = `entity_id=eq.${entityId}&entity_type=eq.${entityType}&order=recorded_at.asc`;
   return query<FinanceLedgerEntry>("finance_ledger", params);
 }
+
+// Suma de ledger del mes actual agrupada por entity_id (para barras de categorías)
+export async function getLedgerMonthTotals(): Promise<Record<string, number>> {
+  const now = new Date();
+  const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const entries = await query<FinanceLedgerEntry>(
+    "finance_ledger",
+    `recorded_at=gte.${from}&order=recorded_at.desc`
+  );
+  const totals: Record<string, number> = {};
+  for (const e of entries) {
+    totals[e.entity_id] = (totals[e.entity_id] ?? 0) + Number(e.amount);
+  }
+  return totals;
+}

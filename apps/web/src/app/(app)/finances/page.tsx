@@ -6,6 +6,7 @@ import { AssetCard } from "@/components/finance/AssetCard";
 import { PortfolioChart } from "@/components/finance/PortfolioChart";
 import {
   getProjects, getExpenseCategories, getAccounts, getSnapshots, getEntityHistory,
+  getLedgerMonthTotals,
   type FinanceProject, type FinanceExpenseCategory, type FinanceAccount, type FinanceSnapshot
 } from "@/lib/supabase-finance";
 
@@ -61,16 +62,18 @@ export default function FinancesPage() {
   const [dbCategories, setDbCategories] = useState<FinanceExpenseCategory[]>([]);
   const [dbAccounts, setDbAccounts] = useState<FinanceAccount[]>([]);
   const [dbSnapshots, setDbSnapshots] = useState<FinanceSnapshot[]>([]);
+  const [ledgerTotals, setLedgerTotals] = useState<Record<string, number>>({});
 
   // Cargar datos financieros de Supabase
   const loadFinanceData = useCallback(async () => {
-    const [projects, categories, accounts, snapshots] = await Promise.all([
-      getProjects(), getExpenseCategories(), getAccounts(), getSnapshots()
+    const [projects, categories, accounts, snapshots, totals] = await Promise.all([
+      getProjects(), getExpenseCategories(), getAccounts(), getSnapshots(), getLedgerMonthTotals()
     ]);
     setDbProjects(projects);
     setDbCategories(categories);
     setDbAccounts(accounts);
     setDbSnapshots(snapshots);
+    setLedgerTotals(totals);
   }, []);
 
   useEffect(() => {
@@ -449,13 +452,13 @@ export default function FinancesPage() {
             </div>
 
             <div className="text-3xl font-bold text-white mb-6">
-              {formatPrice(dbSnapshots.length > 0 ? Number(dbSnapshots[dbSnapshots.length - 1].total_expenses) : 0)}
+              {formatPrice(Object.values(ledgerTotals).reduce((s, v) => s + v, 0))}
               <span className="text-sm font-normal text-zinc-500"> / {formatPrice(totalBudget)}</span>
             </div>
 
             <div className="flex flex-col gap-5">
               {dbCategories.map(cat => {
-                const spent = Number(dbSnapshots.length > 0 ? dbSnapshots[dbSnapshots.length - 1].total_expenses : 0) / (dbCategories.length || 1);
+                const spent = ledgerTotals[cat.id] ?? 0;
                 const pct = Number(cat.budget_limit) > 0 ? Math.min(100, Math.round((spent / Number(cat.budget_limit)) * 100)) : 0;
                 return (
                   <div 
@@ -469,7 +472,9 @@ export default function FinancesPage() {
                   >
                     <div className="flex justify-between text-sm mb-2">
                       <span className="text-zinc-300">{cat.name}</span>
-                      <span className="font-medium">{pct}%</span>
+                      <span className="font-medium text-xs">
+                        {spent > 0 ? `${formatPrice(spent)} · ` : ""}{pct}%
+                      </span>
                     </div>
                     <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
                       <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: cat.color }}></div>
