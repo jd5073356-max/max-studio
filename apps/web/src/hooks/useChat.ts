@@ -34,6 +34,12 @@ export function useChat() {
           description: `Programada: ${event.schedule}`,
           duration: 5000,
         });
+      } else if (event.type === "finance.updated") {
+        toast.success("💰 Finance Hub actualizado", {
+          description: `${event.actions?.length ?? 1} cambio(s) aplicado(s) por MAX`,
+          duration: 4000,
+        });
+        window.dispatchEvent(new CustomEvent("finance:refresh"));
       }
     },
     [onToken, onDone, onError, loadThreads],

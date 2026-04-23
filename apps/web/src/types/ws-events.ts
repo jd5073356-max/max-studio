@@ -69,6 +69,11 @@ export type ProjectErrorEvent = {
   detail: string;
 };
 
+export type FinanceUpdatedEvent = {
+  type: "finance.updated";
+  actions: Array<{ ok: boolean; action?: string; id?: string; error?: string }>;
+};
+
 export type WsInboundEvent =
   | PongEvent
   | ChatTokenEvent
@@ -78,6 +83,7 @@ export type WsInboundEvent =
   | TaskAutoCreatedEvent
   | ProjectStepEvent
   | ProjectDoneEvent
-  | ProjectErrorEvent;
+  | ProjectErrorEvent
+  | FinanceUpdatedEvent;
 
 export type WsStatus = "connecting" | "connected" | "disconnected";

@@ -77,6 +77,13 @@ export default function FinancesPage() {
     loadFinanceData();
   }, [loadFinanceData]);
 
+  // Refrescar cuando MAX actualiza datos desde el chat
+  useEffect(() => {
+    const handler = () => loadFinanceData();
+    window.addEventListener("finance:refresh", handler);
+    return () => window.removeEventListener("finance:refresh", handler);
+  }, [loadFinanceData]);
+
   // Historial granular para la entidad seleccionada
   const [granularHistory, setGranularHistory] = useState<HistoryData[]>([]);
   const [granularLoading, setGranularLoading] = useState(false);

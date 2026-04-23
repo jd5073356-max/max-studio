@@ -1,7 +1,71 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import Any
 import yfinance as yf
 
+from app.core.supabase import SupabaseRest
+
 finance_router = APIRouter(prefix="/finance", tags=["Finance"])
+
+
+# ── Estado financiero para MAX ────────────────────────────────────────────────
+
+async def get_finance_state() -> dict:
+    """Retorna el estado actual de finanzas desde Supabase (para system prompt)."""
+    sb = SupabaseRest()
+    try:
+        projects, accounts, categories = await _fetch_all(sb)
+    except Exception:
+        return {}
+    return {"projects": projects, "accounts": accounts, "categories": categories}
+
+
+async def _fetch_all(sb: SupabaseRest):
+    import asyncio
+    return await asyncio.gather(
+        sb.select_many("finance_projects", columns="id,name,monthly_income,status,currency,metadata"),
+        sb.select_many("finance_accounts", columns="id,name,account_type,balance,currency,institution"),
+        sb.select_many("finance_expense_categories", columns="id,name,budget_limit,color"),
+    )
+
+
+# ── Endpoint de acción (ejecutado por el parser de ws.py) ────────────────────
+
+class FinanceActionRequest(BaseModel):
+    action: str
+    payload: dict[str, Any]
+
+
+@finance_router.post("/action")
+async def execute_finance_action(req: FinanceActionRequest):
+    sb = SupabaseRest()
+    action = req.action
+    p = req.payload
+
+    if action == "update_account":
+        account_id = p.pop("id")
+        await sb.update("finance_accounts", account_id, p)
+        return {"ok": True, "action": action, "id": account_id}
+
+    elif action == "update_project":
+        project_id = p.pop("id")
+        await sb.update("finance_projects", project_id, p)
+        return {"ok": True, "action": action, "id": project_id}
+
+    elif action == "add_ledger":
+        await sb.insert("finance_ledger", p, returning=False)
+        return {"ok": True, "action": action}
+
+    elif action == "create_expense_category":
+        row = await sb.insert("finance_expense_categories", p)
+        return {"ok": True, "action": action, "id": (row or {}).get("id")}
+
+    elif action == "update_expense_category":
+        cat_id = p.pop("id")
+        await sb.update("finance_expense_categories", cat_id, p)
+        return {"ok": True, "action": action, "id": cat_id}
+
+    raise HTTPException(status_code=400, detail=f"Acción desconocida: {action}")
 
 @finance_router.get("/quote/{symbol}")
 async def get_quote(symbol: str):

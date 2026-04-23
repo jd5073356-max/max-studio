@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 import uuid
 
+import httpx
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.auth.jwt import InvalidToken, decode_token
@@ -17,6 +20,38 @@ from app.core.ws_manager import manager
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ws"])
+
+_FINANCE_BLOCK_RE = re.compile(r"```finance_action\s*(.*?)\s*```", re.DOTALL)
+
+
+def _strip_finance_blocks(text: str) -> str:
+    """Elimina bloques finance_action del texto visible."""
+    return _FINANCE_BLOCK_RE.sub("", text).strip()
+
+
+async def _execute_finance_actions(user_id: str, response_text: str) -> list[dict]:
+    """Detecta y ejecuta bloques finance_action. Retorna lista de resultados."""
+    blocks = _FINANCE_BLOCK_RE.findall(response_text)
+    if not blocks:
+        return []
+
+    results = []
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        for block in blocks:
+            try:
+                action_data = json.loads(block)
+                resp = await client.post(
+                    "http://localhost:8003/finance/action",
+                    json=action_data,
+                )
+                result = resp.json()
+                results.append(result)
+                logger.info("finance_action executed user=%s action=%s", user_id, action_data.get("action"))
+            except Exception as exc:
+                logger.error("finance_action failed user=%s: %s", user_id, exc)
+                results.append({"ok": False, "error": str(exc)})
+
+    return results
 
 
 async def handle_chat_send(user_id: str, data: dict) -> None:
@@ -68,10 +103,24 @@ async def handle_chat_send(user_id: str, data: dict) -> None:
         )
         return
 
-    # 4. Guardar respuesta del asistente
+    # 4. Ejecutar finance_actions si MAX incluyó bloques
+    finance_results = await _execute_finance_actions(user_id, full_response)
+    visible_response = _strip_finance_blocks(full_response)
+
+    # Notificar al frontend que actualice el Finance Hub
+    if finance_results:
+        await manager.send(
+            user_id,
+            {"type": "finance.updated", "actions": finance_results},
+        )
+        # Invalida cache de finanzas para que el próximo mensaje tenga datos frescos
+        from app.chat.dispatcher import _finance_cache
+        _finance_cache["ts"] = 0.0
+
+    # 5. Guardar respuesta visible (sin bloques de acción)
     assistant_row = await sb.insert(
         "conversations",
-        {"engine": "pwa", "role": "assistant", "content": full_response},
+        {"engine": "pwa", "role": "assistant", "content": visible_response},
     )
 
     await manager.send(
