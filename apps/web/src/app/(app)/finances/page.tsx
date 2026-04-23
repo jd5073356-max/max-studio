@@ -211,16 +211,25 @@ export default function FinancesPage() {
 
   const portfolioValue = totalLiquidity; // Ahora es solo lo que hay en cuentas reales
 
-  // Data is stored in COP. COP=X gives how many COP per 1 USD.
+  // COP=X da cuántos COP vale 1 USD (ej: 4000)
   const copPerUsd = quotes["COP=X"]?.price || 4000;
-  const conversionRate = displayCurrency === "USD" ? (1 / copPerUsd) : 1;
 
+  // Para datos personales almacenados en COP
   const formatPrice = (val: number) => {
-    const converted = val * conversionRate;
     if (displayCurrency === "USD") {
-      return `$${converted.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
+      const usd = val / copPerUsd;
+      return `$${usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
     }
-    return `$${converted.toLocaleString("es-CO", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} COP`;
+    return `$${val.toLocaleString("es-CO", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} COP`;
+  };
+
+  // Para cotizaciones de mercado que vienen en USD desde yfinance
+  const formatMarketPrice = (val: number) => {
+    if (displayCurrency === "COP") {
+      const cop = val * copPerUsd;
+      return `$${cop.toLocaleString("es-CO", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} COP`;
+    }
+    return `$${val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
   };
 
   return (
@@ -344,7 +353,7 @@ export default function FinancesPage() {
                     price={quote?.price || 0}
                     changePercent={quote?.changePercent || 0}
                     onClick={() => setSelectedAsset(asset.symbol)}
-                    formatPrice={formatPrice}
+                    formatPrice={formatMarketPrice}
                   />
                 </div>
               );
