@@ -105,11 +105,16 @@ export default function FinancesPage() {
   const totalBudget = dbCategories.reduce((sum, c) => sum + Number(c.budget_limit), 0);
   const totalLiquidity = dbAccounts.reduce((sum, a) => sum + Number(a.balance), 0);
 
-  // Generar datos de grafica: Si hay una sub-entidad, usar su historial, si no, usar el snapshot global
+  // Generar datos de grafica:
+  // · selectedSubEntity != null → historial granular de ese item especifico
+  // · selectedSubEntity == null pero selectedSection != null → snapshot global del conjunto
   const personalChartData = useMemo(() => {
-    if (selectedSubEntity) return granularHistory;
+    if (selectedSubEntity) {
+      // Grafica individual del item seleccionado
+      return granularHistory;
+    }
     if (!selectedSection || dbSnapshots.length === 0) return [];
-    
+    // Grafica agregada de todo el conjunto
     const fieldMap: Record<string, keyof FinanceSnapshot> = {
       proyectos: "total_income",
       gastos: "total_expenses",
@@ -121,6 +126,18 @@ export default function FinancesPage() {
       close: Number(s[field]),
     }));
   }, [selectedSection, selectedSubEntity, granularHistory, dbSnapshots]);
+
+  const chartTitle = selectedSubEntity
+    ? selectedSubEntity.name
+    : selectedSection
+      ? `${SECTION_LABELS[selectedSection]} - Total`
+      : "";
+
+  const chartColor = selectedSubEntity
+    ? (selectedSection === "gastos" ? "#f43f5e" : selectedSection === "liquidez" ? "#60a5fa" : "#34d399")
+    : selectedSection
+      ? SECTION_COLORS[selectedSection]
+      : "#a855f7";
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -344,7 +361,11 @@ export default function FinancesPage() {
           
           {/* Ingresos & Proyectos */}
           <div 
-            onClick={() => setSelectedSection(selectedSection === "proyectos" ? null : "proyectos")}
+            onClick={() => {
+              // Clic en el conjunto: mostrar grafica agregada
+              setSelectedSubEntity(null);
+              setSelectedSection(selectedSection === "proyectos" ? null : "proyectos");
+            }}
             className={`rounded-3xl border bg-white/[0.02] p-6 backdrop-blur-2xl xl:col-span-1 cursor-pointer transition-all hover:bg-white/[0.04] ${
               selectedSection === "proyectos" ? "border-emerald-500/50 ring-1 ring-emerald-500/30" : "border-white/5"
             }`}
@@ -390,7 +411,11 @@ export default function FinancesPage() {
 
           {/* Gastos y Presupuesto (Barras de progreso) */}
           <div 
-            onClick={() => setSelectedSection(selectedSection === "gastos" ? null : "gastos")}
+            onClick={() => {
+              // Clic en el conjunto: mostrar grafica agregada
+              setSelectedSubEntity(null);
+              setSelectedSection(selectedSection === "gastos" ? null : "gastos");
+            }}
             className={`rounded-3xl border bg-white/[0.02] p-6 backdrop-blur-2xl xl:col-span-1 cursor-pointer transition-all hover:bg-white/[0.04] ${
               selectedSection === "gastos" ? "border-rose-500/50 ring-1 ring-rose-500/30" : "border-white/5"
             }`}
@@ -439,7 +464,11 @@ export default function FinancesPage() {
 
           {/* Liquidez / Cuentas */}
           <div 
-            onClick={() => setSelectedSection(selectedSection === "liquidez" ? null : "liquidez")}
+            onClick={() => {
+              // Clic en el conjunto: mostrar grafica agregada
+              setSelectedSubEntity(null);
+              setSelectedSection(selectedSection === "liquidez" ? null : "liquidez");
+            }}
             className={`rounded-3xl border bg-white/[0.02] p-6 backdrop-blur-2xl xl:col-span-1 cursor-pointer transition-all hover:bg-white/[0.04] ${
               selectedSection === "liquidez" ? "border-blue-500/50 ring-1 ring-blue-500/30" : "border-white/5"
             }`}
@@ -489,10 +518,10 @@ export default function FinancesPage() {
           <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-6 backdrop-blur-2xl mt-6">
             <div className="mb-6 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold">
-                  {selectedSubEntity ? selectedSubEntity.name : SECTION_LABELS[selectedSection]}
-                </h3>
-                <p className="text-xs text-zinc-500">Historial Detallado</p>
+                <h3 className="text-lg font-semibold">{chartTitle}</h3>
+                <p className="text-xs text-zinc-500">
+                  {selectedSubEntity ? "Historial Individual" : "Resumen del Conjunto"}
+                </p>
               </div>
               <div className="flex items-center gap-4">
                 {/* Period Selector para Gestion Personal */}
@@ -525,10 +554,18 @@ export default function FinancesPage() {
               <div className="h-[300px] flex items-center justify-center">
                 <Activity className="h-8 w-8 text-purple-500 animate-pulse" />
               </div>
+            ) : personalChartData.length === 0 ? (
+              <div className="h-[300px] flex flex-col items-center justify-center gap-3 text-center">
+                <div className="rounded-full bg-white/5 p-4">
+                  <Activity className="h-8 w-8 text-zinc-600" />
+                </div>
+                <p className="text-sm text-zinc-500">Sin historial disponible.</p>
+                <p className="text-xs text-zinc-600">MAX puede agregar datos usando las tablas de Supabase.</p>
+              </div>
             ) : (
               <PortfolioChart 
                 data={personalChartData} 
-                color={selectedSubEntity ? (selectedSection === "gastos" ? "#f43f5e" : "#34d399") : SECTION_COLORS[selectedSection]} 
+                color={chartColor} 
                 formatPrice={formatPrice} 
               />
             )}
