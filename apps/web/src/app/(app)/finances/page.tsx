@@ -71,6 +71,7 @@ export default function FinancesPage() {
   const [displayCurrency, setDisplayCurrency] = useState<"USD" | "COP">("USD");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState<PersonalSection>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const personalChartData = useMemo(() => {
     if (!selectedSection) return [];
@@ -89,54 +90,63 @@ export default function FinancesPage() {
     "Year": "1y"
   };
 
-  useEffect(() => {
-    async function loadQuotes() {
-      try {
-        const quotePromises = ASSETS.map(asset => 
-          fetch(`/api/finance/quote/${asset.symbol}`).then(res => res.json())
-        );
-        const results = await Promise.all(quotePromises);
-        
-        const newQuotes: Record<string, QuoteData> = {};
-        results.forEach((res, index) => {
-          const data = res as QuoteData;
-          if (data && data.price !== undefined) {
-            newQuotes[ASSETS[index].symbol] = {
-              price: data.price,
-              changePercent: data.changePercent
-            };
-          }
-        });
-        setQuotes(newQuotes);
-      } catch (err) {
-        console.error("Failed to load quotes:", err);
-      } finally {
-        setLoading(false);
-      }
+  const loadQuotes = async () => {
+    setLoading(true);
+    try {
+      const quotePromises = ASSETS.map(asset => 
+        fetch(`/api/finance/quote/${asset.symbol}`).then(res => res.json())
+      );
+      const results = await Promise.all(quotePromises);
+      
+      const newQuotes: Record<string, QuoteData> = {};
+      results.forEach((res, index) => {
+        const data = res as QuoteData;
+        if (data && data.price !== undefined) {
+          newQuotes[ASSETS[index].symbol] = {
+            price: data.price,
+            changePercent: data.changePercent
+          };
+        }
+      });
+      setQuotes(newQuotes);
+    } catch (err) {
+      console.error("Failed to load quotes:", err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const histRes = await fetch(`/api/finance/history/${selectedAsset}?period=${selectedPeriod}`).then(res => res.json());
+      const histData = histRes as { history?: HistoryData[] };
+      if (histData && histData.history) {
+        setHistory(histData.history);
+      } else {
+        setHistory([]);
+      }
+    } catch (err) {
+      console.error("Failed to load history data:", err);
+      setHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadQuotes();
   }, []);
 
   useEffect(() => {
-    async function loadHistory() {
-      setHistoryLoading(true);
-      try {
-        const histRes = await fetch(`/api/finance/history/${selectedAsset}?period=${selectedPeriod}`).then(res => res.json());
-        const histData = histRes as { history?: HistoryData[] };
-        if (histData && histData.history) {
-          setHistory(histData.history);
-        } else {
-          setHistory([]);
-        }
-      } catch (err) {
-        console.error("Failed to load history data:", err);
-        setHistory([]);
-      } finally {
-        setHistoryLoading(false);
-      }
-    }
     loadHistory();
   }, [selectedAsset, selectedPeriod]);
+
+  const handleRefresh = () => {
+    loadQuotes();
+    loadHistory();
+    showToast("Mercados actualizados en tiempo real");
+  };
 
   const portfolioValue = 
     (quotes["BTC-USD"]?.price || 0) * 0.15 + 
@@ -183,10 +193,13 @@ export default function FinancesPage() {
             </button>
           </div>
           
-          <div className="flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-sm font-medium border border-white/5 backdrop-blur-md">
-            <Activity className="h-4 w-4 text-purple-400" />
-            <span className="text-zinc-300">Live Market</span>
-          </div>
+          <button 
+            onClick={handleRefresh}
+            className={`flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-sm font-medium border border-white/5 backdrop-blur-md transition-all hover:bg-white/10 active:scale-95 ${loading ? 'opacity-50 pointer-events-none' : ''}`}
+          >
+            <Activity className={`h-4 w-4 text-purple-400 ${loading ? 'animate-pulse' : ''}`} />
+            <span className="text-zinc-300">{loading ? 'Actualizando...' : 'Live Market'}</span>
+          </button>
         </div>
       </div>
 
@@ -251,7 +264,12 @@ export default function FinancesPage() {
         <div className="flex flex-col gap-6">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Top Tokens & Assets</h3>
-            <button className="text-sm text-purple-400 hover:text-purple-300 transition-colors">View more &rarr;</button>
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="text-sm text-purple-400 hover:text-purple-300 transition-colors"
+            >
+              View more &rarr;
+            </button>
           </div>
           
           <div className="grid gap-4">
@@ -450,6 +468,70 @@ export default function FinancesPage() {
           </div>
         )}
       </div>
+
+      {/* --- Market Modal (View More) --- */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="relative w-full max-w-2xl rounded-3xl border border-white/10 bg-neutral-900 p-8 shadow-2xl overflow-hidden">
+            {/* Background Glow */}
+            <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-purple-600/20 blur-[100px]"></div>
+            
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-2xl font-bold">Mercado Global</h2>
+                  <p className="text-sm text-zinc-400 mt-1">Explora otros activos y mercados</p>
+                </div>
+                <button 
+                  onClick={() => setIsModalOpen(false)}
+                  className="rounded-full bg-white/5 p-2 hover:bg-white/10 transition-colors"
+                >
+                  <Lock className="h-5 w-5 text-zinc-400" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                {[
+                  { name: "S&P 500", symbol: "^GSPC", type: "Index" },
+                  { name: "Nasdaq 100", symbol: "^NDX", type: "Index" },
+                  { name: "Gold Futures", symbol: "GC=F", type: "Commodity" },
+                  { name: "Crude Oil", symbol: "CL=F", type: "Commodity" },
+                  { name: "Apple Inc.", symbol: "AAPL", type: "Stock" },
+                  { name: "Tesla, Inc.", symbol: "TSLA", type: "Stock" },
+                  { name: "NVIDIA Corp.", symbol: "NVDA", type: "Stock" },
+                  { name: "Amazon.com", symbol: "AMZN", type: "Stock" },
+                ].map((m) => (
+                  <div key={m.symbol} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-purple-500/30 transition-all group">
+                    <div className="flex flex-col">
+                      <span className="font-semibold">{m.name}</span>
+                      <span className="text-xs text-zinc-500">{m.type} • {m.symbol}</span>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setSelectedAsset(m.symbol);
+                        setIsModalOpen(false);
+                        showToast(`Cambiando a ${m.name}`);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-purple-600/10 text-purple-400 text-xs font-bold opacity-0 group-hover:opacity-100 transition-all hover:bg-purple-600 hover:text-white"
+                    >
+                      Analizar
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 pt-6 border-t border-white/5 flex justify-end">
+                <button 
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-6 py-2 rounded-xl bg-white/5 text-sm font-medium hover:bg-white/10 transition-colors"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
