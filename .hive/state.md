@@ -45,13 +45,9 @@
 
 ## 🔴 Pendientes bloqueantes (resolver primero)
 
-1. **Agente PC offline** — heartbeat falla con 401 Unauthorized
-   - Causa: EC2 gateway .env tiene AGENT_API_KEY incorrecto (probablemente el placeholder)
-   - Fix: SSH → `sed -i 's/AGENT_API_KEY=.*/AGENT_API_KEY=S34PkS_wob0lqGV-wD35OZSGAeXrIvWjFRxSsmqJMDM/' ~/max-studio/apps/gateway/.env` → reiniciar gateway
+1. **Agente PC offline** — [HECHO] Fix aplicado (AGENT_API_KEY actualizado vía SSH)
 
-2. **Modelo siempre usa Sonnet** — Dispatch no se usa
-   - Causa: EC2 gateway .env no tiene DISPATCH_SECRET
-   - Fix: SSH → `echo "DISPATCH_SECRET=MAX_SUPER_SECRET_2026" >> ~/max-studio/apps/gateway/.env` → reiniciar gateway
+2. **Modelo siempre usa Sonnet** — [HECHO] Fix aplicado (DISPATCH_SECRET actualizado vía SSH)
 
 3. **URL gateway temporal** — Cloudflare tunnel cambia en cada reinicio
    - Fix pendiente: comprar dominio ($2) → Cloudflare named tunnel permanente
@@ -64,7 +60,7 @@
 - Revocar y regenerar Moonshot API key (expuesta en chat)
 - Moonshot API key no está en EC2 gateway .env → /kimi/* y visión no funcionan en prod
 - EC2: verificar que openpyxl, python-docx, python-pptx estén instalados en venv
-- Hacer git pull en EC2 para tener los últimos cambios del dispatcher y context router
+- [HECHO] Hacer git pull en EC2 para tener los últimos cambios del dispatcher y context router
 - ALLOWED_ORIGINS en EC2 .env: agregar `https://max-studio-ashy.vercel.app`
 
 ---
@@ -72,8 +68,6 @@
 ## 📋 Próximo paso recomendado
 
 **Antigravity debe:**
-1. Leer `.hive/context.md` para arquitectura completa
-2. SSH a EC2 y aplicar los 3 fixes de .env (AGENT_API_KEY + DISPATCH_SECRET + ALLOWED_ORIGINS)
-3. Hacer `git pull` en EC2 y reiniciar gateway
-4. Verificar que agente PC aparece online en /system
-5. Verificar que chat usa gpt-120 (ver logs del gateway)
+1. Confirmar con Juan si falta comprar el dominio para el túnel permanente.
+2. Revocar y regenerar Moonshot API key e insertarla en el gateway.
+3. Probar que el chat está funcionando correctamente.

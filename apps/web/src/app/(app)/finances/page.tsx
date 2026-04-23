@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { ArrowRight, Lock, Send, ArrowLeftRight, Activity, DollarSign, Wallet, CreditCard, Building2, Briefcase } from "lucide-react";
 import { AssetCard } from "@/components/finance/AssetCard";
 import { PortfolioChart } from "@/components/finance/PortfolioChart";
+import {
+  getProjects, getExpenseCategories, getAccounts, getSnapshots,
+  type FinanceProject, type FinanceExpenseCategory, type FinanceAccount, type FinanceSnapshot
+} from "@/lib/supabase-finance";
 
 // Datos simulados de tendencia mensual para cada seccion personal
 type PersonalSection = "proyectos" | "gastos" | "liquidez" | null;
@@ -19,29 +23,6 @@ const SECTION_COLORS: Record<string, string> = {
   gastos: "#f43f5e",
   liquidez: "#60a5fa",
 };
-
-// Genera datos simulados de los ultimos 6 meses
-function generateMockHistory(section: string): { date: string; close: number }[] {
-  const now = new Date();
-  const points: { date: string; close: number }[] = [];
-
-  const baselines: Record<string, number[]> = {
-    proyectos: [3200, 3500, 3800, 4100, 4200, 4500],
-    gastos:    [1800, 1500, 1900, 1600, 1400, 1200],
-    liquidez:  [5000, 5500, 6200, 7000, 7800, 8500],
-  };
-
-  const values = baselines[section] || baselines.liquidez;
-
-  for (let i = 0; i < 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
-    points.push({
-      date: d.toISOString().split("T")[0],
-      close: values[i],
-    });
-  }
-  return points;
-}
 
 const ASSETS = [
   { symbol: "BTC-USD", name: "Bitcoin" },
@@ -73,10 +54,46 @@ export default function FinancesPage() {
   const [selectedSection, setSelectedSection] = useState<PersonalSection>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // --- Datos reales de Supabase ---
+  const [dbProjects, setDbProjects] = useState<FinanceProject[]>([]);
+  const [dbCategories, setDbCategories] = useState<FinanceExpenseCategory[]>([]);
+  const [dbAccounts, setDbAccounts] = useState<FinanceAccount[]>([]);
+  const [dbSnapshots, setDbSnapshots] = useState<FinanceSnapshot[]>([]);
+
+  // Cargar datos financieros de Supabase
+  const loadFinanceData = useCallback(async () => {
+    const [projects, categories, accounts, snapshots] = await Promise.all([
+      getProjects(), getExpenseCategories(), getAccounts(), getSnapshots()
+    ]);
+    setDbProjects(projects);
+    setDbCategories(categories);
+    setDbAccounts(accounts);
+    setDbSnapshots(snapshots);
+  }, []);
+
+  useEffect(() => {
+    loadFinanceData();
+  }, [loadFinanceData]);
+
+  // Totales calculados desde la base de datos
+  const totalIncome = dbProjects.filter(p => p.status === "active").reduce((sum, p) => sum + Number(p.monthly_income), 0);
+  const totalBudget = dbCategories.reduce((sum, c) => sum + Number(c.budget_limit), 0);
+  const totalLiquidity = dbAccounts.reduce((sum, a) => sum + Number(a.balance), 0);
+
+  // Generar datos de grafica desde snapshots reales
   const personalChartData = useMemo(() => {
-    if (!selectedSection) return [];
-    return generateMockHistory(selectedSection);
-  }, [selectedSection]);
+    if (!selectedSection || dbSnapshots.length === 0) return [];
+    const fieldMap: Record<string, keyof FinanceSnapshot> = {
+      proyectos: "total_income",
+      gastos: "total_expenses",
+      liquidez: "total_liquidity",
+    };
+    const field = fieldMap[selectedSection];
+    return dbSnapshots.map(s => ({
+      date: s.month,
+      close: Number(s[field]),
+    }));
+  }, [selectedSection, dbSnapshots]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -319,31 +336,21 @@ export default function FinancesPage() {
             </div>
             
             <div className="text-3xl font-bold text-white mb-6">
-              {formatPrice(4500)}
+              {formatPrice(totalIncome)}
             </div>
 
             <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between rounded-xl bg-white/5 p-4">
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium">Desarrollo Web - Cliente A</span>
-                  <span className="text-xs text-zinc-500">Facturado mensual</span>
+              {dbProjects.map(p => (
+                <div key={p.id} className={`flex items-center justify-between rounded-xl bg-white/5 p-4 ${p.status !== "active" ? "opacity-70" : ""}`}>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">{p.name}</span>
+                    <span className="text-xs text-zinc-500">{p.description || p.recurrence}</span>
+                  </div>
+                  <span className={`font-semibold ${p.status === "active" ? "text-emerald-400" : "text-zinc-300"}`}>
+                    {formatPrice(Number(p.monthly_income))}
+                  </span>
                 </div>
-                <span className="font-semibold text-emerald-400">{formatPrice(2000)}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl bg-white/5 p-4">
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium">Asesoría Tecnológica</span>
-                  <span className="text-xs text-zinc-500">Recurrente</span>
-                </div>
-                <span className="font-semibold text-emerald-400">{formatPrice(1500)}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl bg-white/5 p-4 opacity-70">
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium">Venta de Software (Beta)</span>
-                  <span className="text-xs text-zinc-500">Cierre estimado en 15d</span>
-                </div>
-                <span className="font-semibold text-zinc-300">{formatPrice(1000)}</span>
-              </div>
+              ))}
             </div>
           </div>
 
@@ -365,42 +372,26 @@ export default function FinancesPage() {
             </div>
 
             <div className="text-3xl font-bold text-white mb-6">
-              {formatPrice(1200)} <span className="text-sm font-normal text-zinc-500">/ {formatPrice(2000)}</span>
+              {formatPrice(dbSnapshots.length > 0 ? Number(dbSnapshots[dbSnapshots.length - 1].total_expenses) : 0)}
+              <span className="text-sm font-normal text-zinc-500"> / {formatPrice(totalBudget)}</span>
             </div>
 
             <div className="flex flex-col gap-5">
-              {/* Gasto 1 */}
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-zinc-300">Vivienda & Servicios</span>
-                  <span className="font-medium">85%</span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                  <div className="h-full bg-rose-500 rounded-full" style={{ width: '85%' }}></div>
-                </div>
-              </div>
-              
-              {/* Gasto 2 */}
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-zinc-300">Tecnología & Licencias</span>
-                  <span className="font-medium">40%</span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                  <div className="h-full bg-amber-500 rounded-full" style={{ width: '40%' }}></div>
-                </div>
-              </div>
-
-              {/* Gasto 3 */}
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-zinc-300">Alimentación & Ocio</span>
-                  <span className="font-medium">60%</span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                  <div className="h-full bg-purple-500 rounded-full" style={{ width: '60%' }}></div>
-                </div>
-              </div>
+              {dbCategories.map(cat => {
+                const spent = Number(dbSnapshots.length > 0 ? dbSnapshots[dbSnapshots.length - 1].total_expenses : 0) / (dbCategories.length || 1);
+                const pct = Number(cat.budget_limit) > 0 ? Math.min(100, Math.round((spent / Number(cat.budget_limit)) * 100)) : 0;
+                return (
+                  <div key={cat.id}>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-zinc-300">{cat.name}</span>
+                      <span className="font-medium">{pct}%</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: cat.color }}></div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -422,25 +413,20 @@ export default function FinancesPage() {
             </div>
 
             <div className="text-3xl font-bold text-white mb-6">
-              {formatPrice(8500)}
+              {formatPrice(totalLiquidity)}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-2xl bg-white/5 p-4 border border-white/5">
-                <Building2 className="h-5 w-5 text-zinc-400 mb-2" />
-                <p className="text-xs text-zinc-500 mb-1">Bancolombia</p>
-                <p className="font-semibold text-sm">{formatPrice(6000)}</p>
-              </div>
-              <div className="rounded-2xl bg-white/5 p-4 border border-white/5">
-                <Building2 className="h-5 w-5 text-zinc-400 mb-2" />
-                <p className="text-xs text-zinc-500 mb-1">Nequi</p>
-                <p className="font-semibold text-sm">{formatPrice(500)}</p>
-              </div>
-              <div className="rounded-2xl bg-white/5 p-4 border border-white/5 col-span-2">
-                <DollarSign className="h-5 w-5 text-emerald-400 mb-2" />
-                <p className="text-xs text-zinc-500 mb-1">Cuenta USD (Stripe/Payoneer)</p>
-                <p className="font-semibold text-sm">{formatPrice(2000)}</p>
-              </div>
+              {dbAccounts.map((acc, i) => (
+                <div key={acc.id} className={`rounded-2xl bg-white/5 p-4 border border-white/5 ${i === dbAccounts.length - 1 && dbAccounts.length % 2 !== 0 ? "col-span-2" : ""}`}>
+                  {acc.icon === "dollar-sign" 
+                    ? <DollarSign className="h-5 w-5 text-emerald-400 mb-2" />
+                    : <Building2 className="h-5 w-5 text-zinc-400 mb-2" />
+                  }
+                  <p className="text-xs text-zinc-500 mb-1">{acc.institution || acc.name}</p>
+                  <p className="font-semibold text-sm">{formatPrice(Number(acc.balance))}</p>
+                </div>
+              ))}
             </div>
           </div>
           
