@@ -5,7 +5,7 @@ import { ArrowRight, Lock, Send, ArrowLeftRight, Activity, DollarSign, Wallet, C
 import { AssetCard } from "@/components/finance/AssetCard";
 import { PortfolioChart } from "@/components/finance/PortfolioChart";
 import {
-  getProjects, getExpenseCategories, getAccounts, getSnapshots,
+  getProjects, getExpenseCategories, getAccounts, getSnapshots, getEntityHistory,
   type FinanceProject, type FinanceExpenseCategory, type FinanceAccount, type FinanceSnapshot
 } from "@/lib/supabase-finance";
 
@@ -52,6 +52,8 @@ export default function FinancesPage() {
   const [displayCurrency, setDisplayCurrency] = useState<"USD" | "COP">("USD");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState<PersonalSection>(null);
+  const [selectedSubEntity, setSelectedSubEntity] = useState<{id: string, type: string, name: string} | null>(null);
+  const [personalPeriod, setPersonalPeriod] = useState<string>("1mo");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // --- Datos reales de Supabase ---
@@ -75,14 +77,39 @@ export default function FinancesPage() {
     loadFinanceData();
   }, [loadFinanceData]);
 
+  // Historial granular para la entidad seleccionada
+  const [granularHistory, setGranularHistory] = useState<HistoryData[]>([]);
+  const [granularLoading, setGranularLoading] = useState(false);
+
+  useEffect(() => {
+    async function loadGranular() {
+      if (!selectedSubEntity) return;
+      setGranularLoading(true);
+      try {
+        const data = await getEntityHistory(selectedSubEntity.id, selectedSubEntity.type, personalPeriod);
+        setGranularHistory(data.map((d: any) => ({
+          date: d.recorded_at.split("T")[0],
+          close: Number(d.amount)
+        })));
+      } catch (err) {
+        console.error("Ledger load error:", err);
+      } finally {
+        setGranularLoading(false);
+      }
+    }
+    loadGranular();
+  }, [selectedSubEntity, personalPeriod]);
+
   // Totales calculados desde la base de datos
   const totalIncome = dbProjects.filter(p => p.status === "active").reduce((sum, p) => sum + Number(p.monthly_income), 0);
   const totalBudget = dbCategories.reduce((sum, c) => sum + Number(c.budget_limit), 0);
   const totalLiquidity = dbAccounts.reduce((sum, a) => sum + Number(a.balance), 0);
 
-  // Generar datos de grafica desde snapshots reales
+  // Generar datos de grafica: Si hay una sub-entidad, usar su historial, si no, usar el snapshot global
   const personalChartData = useMemo(() => {
+    if (selectedSubEntity) return granularHistory;
     if (!selectedSection || dbSnapshots.length === 0) return [];
+    
     const fieldMap: Record<string, keyof FinanceSnapshot> = {
       proyectos: "total_income",
       gastos: "total_expenses",
@@ -93,7 +120,7 @@ export default function FinancesPage() {
       date: s.month,
       close: Number(s[field]),
     }));
-  }, [selectedSection, dbSnapshots]);
+  }, [selectedSection, selectedSubEntity, granularHistory, dbSnapshots]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -165,10 +192,7 @@ export default function FinancesPage() {
     showToast("Mercados actualizados en tiempo real");
   };
 
-  const portfolioValue = 
-    (quotes["BTC-USD"]?.price || 0) * 0.15 + 
-    (quotes["ETH-USD"]?.price || 0) * 1.5 + 
-    (quotes["SOL-USD"]?.price || 0) * 20;
+  const portfolioValue = totalLiquidity; // Ahora es solo lo que hay en cuentas reales
 
   const conversionRate = displayCurrency === "COP" ? (quotes["COP=X"]?.price || 3900) : 1;
 
@@ -341,7 +365,17 @@ export default function FinancesPage() {
 
             <div className="flex flex-col gap-4">
               {dbProjects.map(p => (
-                <div key={p.id} className={`flex items-center justify-between rounded-xl bg-white/5 p-4 ${p.status !== "active" ? "opacity-70" : ""}`}>
+                <div 
+                  key={p.id} 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedSection("proyectos");
+                    setSelectedSubEntity({id: p.id, type: "project", name: p.name});
+                  }}
+                  className={`flex items-center justify-between rounded-xl p-4 transition-all hover:bg-white/10 ${
+                    selectedSubEntity?.id === p.id ? "bg-white/10 border border-emerald-500/30" : "bg-white/5 border border-transparent"
+                  } ${p.status !== "active" ? "opacity-70" : ""}`}
+                >
                   <div className="flex flex-col">
                     <span className="text-sm font-medium">{p.name}</span>
                     <span className="text-xs text-zinc-500">{p.description || p.recurrence}</span>
@@ -381,7 +415,15 @@ export default function FinancesPage() {
                 const spent = Number(dbSnapshots.length > 0 ? dbSnapshots[dbSnapshots.length - 1].total_expenses : 0) / (dbCategories.length || 1);
                 const pct = Number(cat.budget_limit) > 0 ? Math.min(100, Math.round((spent / Number(cat.budget_limit)) * 100)) : 0;
                 return (
-                  <div key={cat.id}>
+                  <div 
+                    key={cat.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedSection("gastos");
+                      setSelectedSubEntity({id: cat.id, type: "category", name: cat.name});
+                    }}
+                    className={`p-2 rounded-xl transition-all hover:bg-white/5 cursor-pointer ${selectedSubEntity?.id === cat.id ? "bg-white/5" : ""}`}
+                  >
                     <div className="flex justify-between text-sm mb-2">
                       <span className="text-zinc-300">{cat.name}</span>
                       <span className="font-medium">{pct}%</span>
@@ -418,7 +460,17 @@ export default function FinancesPage() {
 
             <div className="grid grid-cols-2 gap-4">
               {dbAccounts.map((acc, i) => (
-                <div key={acc.id} className={`rounded-2xl bg-white/5 p-4 border border-white/5 ${i === dbAccounts.length - 1 && dbAccounts.length % 2 !== 0 ? "col-span-2" : ""}`}>
+                <div 
+                  key={acc.id} 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedSection("liquidez");
+                    setSelectedSubEntity({id: acc.id, type: "account", name: acc.name});
+                  }}
+                  className={`rounded-2xl p-4 border transition-all hover:bg-white/10 cursor-pointer ${
+                    selectedSubEntity?.id === acc.id ? "bg-white/10 border-blue-500/30" : "bg-white/5 border-white/5"
+                  } ${i === dbAccounts.length - 1 && dbAccounts.length % 2 !== 0 ? "col-span-2" : ""}`}
+                >
                   {acc.icon === "dollar-sign" 
                     ? <DollarSign className="h-5 w-5 text-emerald-400 mb-2" />
                     : <Building2 className="h-5 w-5 text-zinc-400 mb-2" />
@@ -436,21 +488,50 @@ export default function FinancesPage() {
         {selectedSection && (
           <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-6 backdrop-blur-2xl mt-6">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">
-                {SECTION_LABELS[selectedSection]} - Tendencia 6 Meses
-              </h3>
-              <button 
-                onClick={() => setSelectedSection(null)}
-                className="text-xs text-zinc-400 hover:text-white transition-colors rounded-full bg-white/5 px-3 py-1"
-              >
-                Cerrar
-              </button>
+              <div>
+                <h3 className="text-lg font-semibold">
+                  {selectedSubEntity ? selectedSubEntity.name : SECTION_LABELS[selectedSection]}
+                </h3>
+                <p className="text-xs text-zinc-500">Historial Detallado</p>
+              </div>
+              <div className="flex items-center gap-4">
+                {/* Period Selector para Gestion Personal */}
+                <div className="flex bg-white/5 rounded-lg p-1">
+                  {["Day", "Week", "Month", "Year"].map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setPersonalPeriod(periodMap[p])}
+                      className={`px-3 py-1 text-xs rounded-md transition-all ${
+                        personalPeriod === periodMap[p] ? "bg-white/10 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                <button 
+                  onClick={() => {
+                    setSelectedSection(null);
+                    setSelectedSubEntity(null);
+                  }}
+                  className="text-xs text-zinc-400 hover:text-white transition-colors rounded-full bg-white/5 px-3 py-1"
+                >
+                  Cerrar
+                </button>
+              </div>
             </div>
-            <PortfolioChart 
-              data={personalChartData} 
-              color={SECTION_COLORS[selectedSection]} 
-              formatPrice={formatPrice} 
-            />
+            
+            {granularLoading ? (
+              <div className="h-[300px] flex items-center justify-center">
+                <Activity className="h-8 w-8 text-purple-500 animate-pulse" />
+              </div>
+            ) : (
+              <PortfolioChart 
+                data={personalChartData} 
+                color={selectedSubEntity ? (selectedSection === "gastos" ? "#f43f5e" : "#34d399") : SECTION_COLORS[selectedSection]} 
+                formatPrice={formatPrice} 
+              />
+            )}
           </div>
         )}
       </div>
