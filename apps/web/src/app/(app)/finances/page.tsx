@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Lock, Send, ArrowLeftRight, Activity } from "lucide-react";
 import { AssetCard } from "@/components/finance/AssetCard";
 import { PortfolioChart } from "@/components/finance/PortfolioChart";
-import { apiFetch } from "@/lib/api";
 
 const ASSETS = [
   { symbol: "BTC-USD", name: "Bitcoin" },
@@ -32,7 +31,7 @@ export default function FinancesPage() {
     async function loadData() {
       try {
         const quotePromises = ASSETS.map(asset => 
-          apiFetch(`/finance/quote/${asset.symbol}`)
+          fetch(`/api/finance/quote/${asset.symbol}`).then(res => res.json())
         );
         const results = await Promise.all(quotePromises);
         
@@ -48,7 +47,7 @@ export default function FinancesPage() {
         });
         setQuotes(newQuotes);
 
-        const histRes = await apiFetch("/finance/history/BTC-USD?period=1mo");
+        const histRes = await fetch("/api/finance/history/BTC-USD?period=1mo").then(res => res.json());
         const histData = histRes as { history?: HistoryData[] };
         if (histData && histData.history) {
           setHistory(histData.history);
