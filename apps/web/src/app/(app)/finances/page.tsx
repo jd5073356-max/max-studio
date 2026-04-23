@@ -9,7 +9,8 @@ const ASSETS = [
   { symbol: "BTC-USD", name: "Bitcoin" },
   { symbol: "ETH-USD", name: "Ethereum" },
   { symbol: "SOL-USD", name: "Solana" },
-  { symbol: "AAPL", name: "Apple Inc." }
+  { symbol: "DX-Y.NYB", name: "US Dollar Index" },
+  { symbol: "COP=X", name: "USD/COP" }
 ];
 
 interface QuoteData {
@@ -26,9 +27,19 @@ export default function FinancesPage() {
   const [quotes, setQuotes] = useState<Record<string, QuoteData>>({});
   const [history, setHistory] = useState<HistoryData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [selectedAsset, setSelectedAsset] = useState<string>("BTC-USD");
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("1mo");
+
+  const periodMap: Record<string, string> = {
+    "Day": "1d",
+    "Week": "5d",
+    "Month": "1mo",
+    "Year": "1y"
+  };
 
   useEffect(() => {
-    async function loadData() {
+    async function loadQuotes() {
       try {
         const quotePromises = ASSETS.map(asset => 
           fetch(`/api/finance/quote/${asset.symbol}`).then(res => res.json())
@@ -46,20 +57,35 @@ export default function FinancesPage() {
           }
         });
         setQuotes(newQuotes);
-
-        const histRes = await fetch("/api/finance/history/BTC-USD?period=1mo").then(res => res.json());
-        const histData = histRes as { history?: HistoryData[] };
-        if (histData && histData.history) {
-          setHistory(histData.history);
-        }
       } catch (err) {
-        console.error("Failed to load finance data:", err);
+        console.error("Failed to load quotes:", err);
       } finally {
         setLoading(false);
       }
     }
-    loadData();
+    loadQuotes();
   }, []);
+
+  useEffect(() => {
+    async function loadHistory() {
+      setHistoryLoading(true);
+      try {
+        const histRes = await fetch(`/api/finance/history/${selectedAsset}?period=${selectedPeriod}`).then(res => res.json());
+        const histData = histRes as { history?: HistoryData[] };
+        if (histData && histData.history) {
+          setHistory(histData.history);
+        } else {
+          setHistory([]);
+        }
+      } catch (err) {
+        console.error("Failed to load history data:", err);
+        setHistory([]);
+      } finally {
+        setHistoryLoading(false);
+      }
+    }
+    loadHistory();
+  }, [selectedAsset, selectedPeriod]);
 
   const portfolioValue = 
     (quotes["BTC-USD"]?.price || 0) * 0.15 + 
@@ -111,16 +137,23 @@ export default function FinancesPage() {
 
           <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-6 backdrop-blur-2xl">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Portfolio Overview (BTC)</h3>
+              <h3 className="text-lg font-semibold">Portfolio Overview ({selectedAsset.split("-")[0].replace("=X", "").replace(".NYB", "")})</h3>
               <div className="flex gap-2 rounded-full bg-white/5 p-1">
-                {["Day", "Week", "Month", "Year"].map(t => (
-                  <button key={t} className={`rounded-full px-4 py-1 text-xs font-medium ${t === 'Month' ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white'}`}>
-                    {t}
-                  </button>
-                ))}
+                {Object.keys(periodMap).map(t => {
+                  const isActive = periodMap[t] === selectedPeriod;
+                  return (
+                    <button 
+                      key={t} 
+                      onClick={() => setSelectedPeriod(periodMap[t])}
+                      className={`rounded-full px-4 py-1 text-xs font-medium transition-colors ${isActive ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white'}`}
+                    >
+                      {t}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            {loading ? (
+            {historyLoading ? (
               <div className="flex h-[300px] items-center justify-center text-zinc-500">Loading chart data...</div>
             ) : (
               <PortfolioChart data={history} color="#a855f7" />
@@ -137,14 +170,17 @@ export default function FinancesPage() {
           <div className="grid gap-4">
             {ASSETS.map((asset) => {
               const quote = quotes[asset.symbol];
+              const isActive = asset.symbol === selectedAsset;
               return (
-                <AssetCard
-                  key={asset.symbol}
-                  name={asset.name}
-                  symbol={asset.symbol}
-                  price={quote?.price || 0}
-                  changePercent={quote?.changePercent || 0}
-                />
+                <div key={asset.symbol} className={isActive ? "ring-1 ring-purple-500 rounded-2xl" : ""}>
+                  <AssetCard
+                    name={asset.name}
+                    symbol={asset.symbol}
+                    price={quote?.price || 0}
+                    changePercent={quote?.changePercent || 0}
+                    onClick={() => setSelectedAsset(asset.symbol)}
+                  />
+                </div>
               );
             })}
           </div>

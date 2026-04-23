@@ -9,13 +9,14 @@ interface AssetCardProps {
   changePercent: number;
   marketCap?: string;
   icon?: ReactNode;
+  onClick?: () => void;
 }
 
-export function AssetCard({ name, symbol, price, changePercent, marketCap, icon }: AssetCardProps) {
+export function AssetCard({ name, symbol, price, changePercent, marketCap, icon, onClick }: AssetCardProps) {
   const isPositive = changePercent >= 0;
   
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-white/5 p-5 backdrop-blur-xl transition-all hover:border-purple-500/40 hover:bg-white/10 hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.15)] group cursor-pointer">
+    <div onClick={onClick} className="relative overflow-hidden rounded-2xl border border-white/5 bg-white/5 p-5 backdrop-blur-xl transition-all hover:border-purple-500/40 hover:bg-white/10 hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.15)] group cursor-pointer">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {icon ? (
