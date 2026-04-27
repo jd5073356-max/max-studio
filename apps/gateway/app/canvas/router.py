@@ -48,8 +48,8 @@ async def get_canvas(user: CurrentUser, sb: SupabaseDep) -> dict | None:  # noqa
         return None
 
 
-@router.delete("/clear", status_code=status.HTTP_204_NO_CONTENT)
-async def clear_canvas(user: CurrentUser, sb: SupabaseDep) -> None:  # noqa: ARG001
+@router.delete("/clear")
+async def clear_canvas(user: CurrentUser, sb: SupabaseDep) -> dict:  # noqa: ARG001
     """Borra todos los estados del canvas."""
     try:
         rows = await sb.select_many("canvas_states", columns="id")
@@ -57,3 +57,4 @@ async def clear_canvas(user: CurrentUser, sb: SupabaseDep) -> None:  # noqa: ARG
             await sb.delete("canvas_states", {"id": row["id"]})
     except Exception:
         pass
+    return {"ok": True}
