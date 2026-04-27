@@ -4,6 +4,7 @@ import { useRef, useState, type KeyboardEvent } from "react";
 import { ArrowUp, ImagePlus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ModelSelector } from "@/components/chat/ModelSelector";
 
 interface Props {
   onSend: (content: string) => void;
@@ -156,9 +157,12 @@ export function MessageInput({ onSend, onSendWithImage, disabled }: Props) {
         </Button>
       </div>
 
-      <p className="mt-1 hidden text-center text-[10px] text-muted-foreground md:block">
-        MAX · texto vía gpt-120 · imágenes vía Kimi K2.6
-      </p>
+      <div className="mt-1 flex items-center justify-between px-1">
+        <ModelSelector />
+        <p className="hidden text-center text-[10px] text-muted-foreground md:block">
+          MAX · texto vía gpt-120 · imágenes vía Kimi K2.6
+        </p>
+      </div>
     </div>
   );
 }

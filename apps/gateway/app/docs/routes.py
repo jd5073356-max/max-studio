@@ -27,6 +27,7 @@ from pydantic import BaseModel
 from app.chat.dispatcher import stream_response
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, SupabaseDep
+from app.core.storage import maybe_offload
 from app.kimi.client import generate_text as kimi_generate
 
 router = APIRouter(prefix="/docs", tags=["docs"])
@@ -351,7 +352,10 @@ async def generate_doc(
     filename = f"{safe_title.replace(' ', '_')}_{uuid.uuid4().hex[:6]}.{fmt}"
     filepath = DOCS_DIR / filename
 
-    try:
+    import asyncio
+
+    def _write_file() -> None:
+        """Genera y escribe el archivo en el thread pool (evita bloquear el event loop)."""
         if fmt == "docx":
             filepath.write_bytes(_make_docx(body.title, raw_content))
         elif fmt == "xlsx":
@@ -364,6 +368,9 @@ async def generate_doc(
             filepath.write_text(_make_canvas(body.title, raw_content), encoding="utf-8")
         else:
             filepath.write_text(raw_content, encoding="utf-8")
+
+    try:
+        await asyncio.to_thread(_write_file)
     except ImportError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -372,12 +379,15 @@ async def generate_doc(
 
     size = filepath.stat().st_size
 
+    # Offload large files to Supabase Storage
+    storage_url = await maybe_offload(filepath, filename)
+
     row = await sb.insert(
         "generated_docs",
         {
             "filename": filename,
             "mime_type": MIME_TYPES[fmt],
-            "storage_path": str(filepath),
+            "storage_path": storage_url or str(filepath),
             "size_bytes": size,
         },
     )
@@ -386,6 +396,7 @@ async def generate_doc(
         "id": (row or {}).get("id"),
         "filename": filename,
         "size_bytes": size,
+        "storage_url": storage_url,
         "preview": textwrap.shorten(raw_content, width=300, placeholder="…"),
     }
 

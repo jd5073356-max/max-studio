@@ -12,6 +12,8 @@ import {
   Settings,
   Sparkles,
   CalendarClock,
+  Layout,
+  FlaskConical,
 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { cn } from "@/lib/utils";
@@ -30,7 +32,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/memory/conversations", label: "Memoria", icon: Brain, matchPrefix: "/memory" },
   { href: "/memory/obsidian", label: "Obsidian", icon: BookMarked },
   { href: "/docs", label: "Documentos", icon: FileText },
+  { href: "/canvas", label: "Canvas", icon: Layout },
   { href: "/finances", label: "Finanzas", icon: LineChart },
+  { href: "/laboratorio", label: "Laboratorio", icon: FlaskConical },
   { href: "/settings", label: "Ajustes", icon: Settings },
 ];
 

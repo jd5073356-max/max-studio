@@ -86,9 +86,14 @@ async def handle_chat_send(user_id: str, data: dict) -> None:
     )
 
     # 3. Streaming de respuesta LLM
+    # model override from Brain Switcher (None = auto / Dispatch routing)
+    model_override: str | None = data.get("model") or None
+    if model_override == "auto":
+        model_override = None
+
     full_response = ""
     try:
-        async for token in stream_response(content, history, model=settings.default_model):
+        async for token in stream_response(content, history, model=model_override):
             await manager.send(
                 user_id,
                 {"type": "chat.token", "session_id": session_id, "token": token},
@@ -128,7 +133,7 @@ async def handle_chat_send(user_id: str, data: dict) -> None:
         {
             "type": "chat.done",
             "session_id": session_id,
-            "model_used": settings.default_model,
+            "model_used": model_override or settings.default_model,
             "conversation_id": (assistant_row or {}).get("id", session_id),
         },
     )

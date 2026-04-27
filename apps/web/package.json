@@ -11,6 +11,7 @@
   "dependencies": {
     "@base-ui/react": "^1.4.0",
     "@ducanh2912/next-pwa": "^10.2.9",
+    "@excalidraw/excalidraw": "^0.18.1",
     "@hookform/resolvers": "^5.2.2",
     "@tanstack/react-query": "^5.99.0",
     "@tanstack/react-table": "^8.21.3",

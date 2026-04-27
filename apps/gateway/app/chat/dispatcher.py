@@ -142,15 +142,31 @@ async def _get_finance_context() -> str:
     return "## Finance Hub\n" + "\n".join(lines)
 
 
-async def _build_system_prompt() -> str:
+async def _get_skills_context(content: str) -> str:
+    """Busca skills relevantes para el mensaje y retorna contexto para el prompt."""
+    try:
+        from app.memory.skills import search_skills
+        matches = await search_skills(content, top_k=2)
+        if not matches:
+            return ""
+        lines = [f"## Skill relevante: {m['content'][:800]}" for m in matches]
+        return "\n\n---\n\n# Skills Relevantes:\n" + "\n\n".join(lines)
+    except Exception:
+        return ""
+
+
+async def _build_system_prompt(content: str = "") -> str:
     """Construye el system prompt para fallback Anthropic."""
     ctx = await _get_claude_md_context()
     finance_ctx = await _get_finance_context()
+    skills_ctx = await _get_skills_context(content) if content else ""
     prompt = BASE_SYSTEM_PROMPT
     if ctx:
         prompt += "\n\n---\n\n# Contexto MAX (CLAUDE.md):\n\n" + ctx[:6000]
     if finance_ctx:
         prompt += "\n\n---\n\n" + finance_ctx
+    if skills_ctx:
+        prompt += skills_ctx
     return prompt
 
 
@@ -220,7 +236,7 @@ async def _via_anthropic(
 
     used_model = model or settings.default_model
     messages = [*history, {"role": "user", "content": content}]
-    system = await _build_system_prompt()
+    system = await _build_system_prompt(content)
 
     headers = {
         "x-api-key": api_key,
@@ -260,6 +276,26 @@ async def _via_anthropic(
                             yield text
 
 
+async def _via_kimi_stream(
+    content: str,
+    history: list[dict[str, str]],
+    settings,
+) -> AsyncGenerator[str, None]:
+    """Kimi K2.5 vía Moonshot API — respuesta word-by-word simulada."""
+    from app.kimi.client import generate_text as kimi_generate
+    system = await _build_system_prompt(content)
+    # Incluir historial en el prompt cuando Kimi no tiene API de multi-turn aquí
+    hist_text = ""
+    for msg in history[-6:]:
+        role = "Juan" if msg["role"] == "user" else "MAX"
+        hist_text += f"{role}: {msg['content']}\n"
+    full_prompt = f"{hist_text}Juan: {content}\nMAX:"
+    reply = await kimi_generate(prompt=full_prompt, system=system)
+    words = reply.split(" ")
+    for i, word in enumerate(words):
+        yield word + (" " if i < len(words) - 1 else "")
+
+
 async def stream_response(
     content: str,
     history: list[dict[str, str]],
@@ -268,12 +304,30 @@ async def stream_response(
 ) -> AsyncGenerator[str, None]:
     """Punto de entrada principal.
 
-    Prioridad:
-      1. Dispatch :8001 (si DISPATCH_SECRET está configurado)
-      2. Anthropic directo (fallback — logueado como WARNING)
+    Routing:
+      - model='kimi-k2.5'      → Moonshot API directo
+      - model='claude-*'       → Anthropic directo con ese model ID
+      - model='gpt-oss:120b'   → Dispatch (lo enruta a nivel 2)
+      - model=None / 'auto'    → Dispatch → fallback Anthropic
     """
     settings = get_settings()
 
+    # Brain Switcher: Kimi explícito
+    if model and model.startswith("kimi"):
+        try:
+            async for token in _via_kimi_stream(content, history, settings):
+                yield token
+            return
+        except Exception as exc:
+            logger.error("Kimi direct failed (%s) — fallback to Dispatch", exc)
+
+    # Brain Switcher: Claude explícito → bypass Dispatch
+    if model and model.startswith("claude"):
+        async for token in _via_anthropic(content, history, settings, model):
+            yield token
+        return
+
+    # Default: Dispatch (con fallback a Anthropic)
     if settings.dispatch_secret:
         try:
             async for token in _via_dispatch(content, settings):
@@ -286,7 +340,6 @@ async def stream_response(
                 exc,
                 settings.dispatch_url,
             )
-            # Fallback automático a Anthropic si Dispatch no responde
             async for token in _via_anthropic(content, history, settings, model):
                 yield token
     else:

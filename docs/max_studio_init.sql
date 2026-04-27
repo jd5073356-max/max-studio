@@ -52,6 +52,29 @@ CREATE OR REPLACE FUNCTION cleanup_old_heartbeats() RETURNS void AS $$
   DELETE FROM agent_heartbeats WHERE received_at < now() - interval '24 hours';
 $$ LANGUAGE sql;
 
+-- ============================================================
+-- FASE 1: Canvas states (Excalidraw persistent storage)
+CREATE TABLE IF NOT EXISTS canvas_states (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  data jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz DEFAULT now()
+);
+
+-- FASE 3: Finance budget categories con predicción
+-- (ya existen finance_expense_categories — solo si necesitas tabla adicional)
+
+-- FASE 4: Simulación 300 agentes
+CREATE TABLE IF NOT EXISTS simulations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  round int NOT NULL,
+  agent_type text NOT NULL,
+  business_idea text,
+  survival_score numeric,
+  analysis text,
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_simulations_round ON simulations(round, agent_type);
+
 -- =============================================================
 -- NOTAS DE INTEGRACIÓN (no es SQL, pero documenta el mapeo):
 --

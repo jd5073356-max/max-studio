@@ -15,6 +15,7 @@ export function useChat() {
   const onDone = useChatStore((s) => s.onDone);
   const onError = useChatStore((s) => s.onError);
   const isLoading = useChatStore((s) => s.isLoading);
+  const selectedModel = useChatStore((s) => s.selectedModel);
 
   const { loadThreads, openThread, newThread } = useThreads();
 
@@ -60,9 +61,14 @@ export function useChat() {
       const trimmed = content.trim();
       if (!trimmed || isLoading) return;
       addUserMessage(trimmed);
-      getWsClient()?.send({ type: "chat.send", content: trimmed });
+      const event: { type: "chat.send"; content: string; model?: string } = {
+        type: "chat.send",
+        content: trimmed,
+      };
+      if (selectedModel && selectedModel !== "auto") event.model = selectedModel;
+      getWsClient()?.send(event);
     },
-    [addUserMessage, isLoading],
+    [addUserMessage, isLoading, selectedModel],
   );
 
   const sendVision = useCallback(

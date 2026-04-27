@@ -3,7 +3,7 @@
 // --- Outbound (PWA → Gateway) ---
 
 export type PingEvent = { type: "ping" };
-export type ChatSendEvent = { type: "chat.send"; content: string };
+export type ChatSendEvent = { type: "chat.send"; content: string; model?: string };
 
 export type WsOutboundEvent = PingEvent | ChatSendEvent;
 

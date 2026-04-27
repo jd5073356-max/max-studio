@@ -63,6 +63,7 @@ export default function FinancesPage() {
   const [dbAccounts, setDbAccounts] = useState<FinanceAccount[]>([]);
   const [dbSnapshots, setDbSnapshots] = useState<FinanceSnapshot[]>([]);
   const [ledgerTotals, setLedgerTotals] = useState<Record<string, number>>({});
+  const [budgetPredictions, setBudgetPredictions] = useState<Record<string, { depleted_date: string; daily_burn: number }>>({});
 
   // Cargar datos financieros de Supabase
   const loadFinanceData = useCallback(async () => {
@@ -74,6 +75,16 @@ export default function FinancesPage() {
     setDbAccounts(accounts);
     setDbSnapshots(snapshots);
     setLedgerTotals(totals);
+
+    // Budget predictions from gateway
+    try {
+      const preds = await fetch("/api/finance/budgets").then(r => r.json()) as Array<{id: string; depleted_date: string; daily_burn: number}>;
+      const map: Record<string, { depleted_date: string; daily_burn: number }> = {};
+      for (const p of preds) map[p.id] = { depleted_date: p.depleted_date, daily_burn: p.daily_burn };
+      setBudgetPredictions(map);
+    } catch {
+      // predictions are optional
+    }
   }, []);
 
   useEffect(() => {
@@ -479,6 +490,28 @@ export default function FinancesPage() {
                     <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
                       <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: cat.color }}></div>
                     </div>
+                    {budgetPredictions[cat.id] && (
+                      <div className="flex items-center justify-between mt-1.5">
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                          budgetPredictions[cat.id].depleted_date === "Agotado"
+                            ? "bg-rose-500/20 text-rose-400"
+                            : pct >= 80
+                            ? "bg-amber-500/20 text-amber-400"
+                            : "bg-white/5 text-zinc-500"
+                        }`}>
+                          {budgetPredictions[cat.id].depleted_date === "Agotado"
+                            ? "⚠ Agotado"
+                            : budgetPredictions[cat.id].depleted_date === "Sin datos"
+                            ? "Sin datos"
+                            : `Agota: ${budgetPredictions[cat.id].depleted_date}`}
+                        </span>
+                        {budgetPredictions[cat.id].daily_burn > 0 && (
+                          <span className="text-[10px] text-zinc-600">
+                            {formatPrice(budgetPredictions[cat.id].daily_burn)}/día
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

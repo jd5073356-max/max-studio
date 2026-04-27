@@ -2,6 +2,7 @@
 
 GET /memory/conversations  — historial cross-channel (tabla `conversations`)
 GET /memory/knowledge      — base de conocimiento RAG (tabla `knowledge`)
+POST/GET /memory/skills    — skills RAG
 """
 
 from __future__ import annotations
@@ -11,8 +12,10 @@ from typing import Any
 from fastapi import APIRouter, Query
 
 from app.core.deps import CurrentUser, SupabaseDep
+from app.memory.skills import router as skills_router
 
 router = APIRouter(prefix="/memory", tags=["memory"])
+router.include_router(skills_router)
 
 
 @router.get("/conversations")

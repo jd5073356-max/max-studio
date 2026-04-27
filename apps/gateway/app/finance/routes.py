@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Any
@@ -70,6 +71,58 @@ async def execute_finance_action(req: FinanceActionRequest):
         return {"ok": True, "action": action, "id": cat_id}
 
     raise HTTPException(status_code=400, detail=f"Acción desconocida: {action}")
+
+@finance_router.get("/budgets")
+async def get_budgets_prediction() -> list[dict]:
+    """Retorna categorías de gasto con % consumido y fecha predicha de agotamiento."""
+    sb = SupabaseRest()
+    categories = await sb.select_many(
+        "finance_expense_categories", columns="id,name,budget_limit,color"
+    )
+    now = datetime.now(timezone.utc)
+    day_of_month = now.day or 1
+
+    ledger_rows = await sb.select_many(
+        "finance_ledger",
+        columns="entity_id,amount",
+        filters={"entity_type": "category"},
+    )
+    totals: dict[str, float] = {}
+    for row in ledger_rows:
+        eid = row["entity_id"]
+        totals[eid] = totals.get(eid, 0.0) + float(row.get("amount", 0))
+
+    result = []
+    for cat in categories:
+        limit = float(cat["budget_limit"]) or 1.0
+        spent = totals.get(cat["id"], 0.0)
+        pct = min(100.0, round((spent / limit) * 100, 1))
+        remaining = limit - spent
+
+        daily_burn = spent / day_of_month if day_of_month > 0 else 0.0
+        if daily_burn > 0 and remaining > 0:
+            days_left = int(remaining / daily_burn)
+            depleted_date = now.replace(
+                day=min(now.day + days_left, 28)
+            ).strftime("%d/%m/%Y")
+        elif remaining <= 0:
+            depleted_date = "Agotado"
+        else:
+            depleted_date = "Sin datos"
+
+        result.append({
+            "id": cat["id"],
+            "name": cat["name"],
+            "color": cat["color"],
+            "budget_limit": limit,
+            "current_spend": spent,
+            "pct": pct,
+            "remaining": remaining,
+            "daily_burn": round(daily_burn, 0),
+            "depleted_date": depleted_date,
+        })
+    return result
+
 
 @finance_router.get("/quote/{symbol}")
 async def get_quote(symbol: str):

@@ -28,10 +28,14 @@ type ChatStore = {
   /** Hilo abierto actualmente. null = hilo nuevo sin mensajes. */
   activeThreadId: string | null;
 
+  /** Modelo seleccionado por el usuario para el próximo mensaje. */
+  selectedModel: string;
+
   setMessages: (msgs: ChatMessage[]) => void;
   setThreads: (threads: ChatThread[]) => void;
   setActiveThread: (id: string | null) => void;
   setLoading: (v: boolean) => void;
+  setSelectedModel: (model: string) => void;
   startNewThread: () => void;
 
   addUserMessage: (content: string) => void;
@@ -46,11 +50,13 @@ export const useChatStore = create<ChatStore>((set) => ({
   isLoading: false,
   threads: [],
   activeThreadId: null,
+  selectedModel: "auto",
 
   setMessages: (messages) => set({ messages }),
   setThreads: (threads) => set({ threads }),
   setActiveThread: (activeThreadId) => set({ activeThreadId }),
   setLoading: (isLoading) => set({ isLoading }),
+  setSelectedModel: (selectedModel) => set({ selectedModel }),
 
   startNewThread: () =>
     set({
