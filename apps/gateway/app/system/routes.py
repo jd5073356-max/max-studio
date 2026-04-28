@@ -2,11 +2,13 @@
 
 - `POST /system/heartbeat` — recibe pings del agente PC (protegido con X-Agent-Key).
 - `GET /system/status` — agrega último heartbeat + health de servicios MAX.
+- `GET /system/memory` — uso de RAM del proceso gateway.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -192,3 +194,31 @@ async def get_models(settings: SettingsDep, _user: CurrentUser) -> dict:
         "default_model": settings.default_model,
         "kimi_model": settings.moonshot_model,
     }
+
+
+@router.get("/memory")
+async def get_memory(_user: CurrentUser) -> dict:
+    """Uso de RAM del proceso gateway (requiere /proc — solo Linux)."""
+    info: dict = {"pid": os.getpid()}
+    try:
+        with open(f"/proc/{os.getpid()}/status") as f:
+            for line in f:
+                if line.startswith(("VmRSS:", "VmPeak:", "VmSize:")):
+                    key, val = line.split(":", 1)
+                    info[key.strip()] = val.strip()
+    except OSError:
+        info["note"] = "solo disponible en Linux"
+
+    # Memoria del sistema
+    try:
+        with open("/proc/meminfo") as f:
+            meminfo = {}
+            for line in f:
+                if line.startswith(("MemTotal:", "MemAvailable:", "SwapTotal:", "SwapFree:")):
+                    k, v = line.split(":", 1)
+                    meminfo[k.strip()] = v.strip()
+        info["system"] = meminfo
+    except OSError:
+        pass
+
+    return info

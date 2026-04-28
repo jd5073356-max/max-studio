@@ -194,9 +194,13 @@ async def _run_simulation(sim_id: str, sb_url: str, sb_key: str) -> None:
         logger.error("Simulation %s failed: %s", sim_id, exc)
         _emit("error", {"detail": str(exc)})
     finally:
-        # Signal end of stream
         if queue:
             queue.put_nowait(None)
+        # Clean up queue after 5 min to avoid memory leak
+        async def _cleanup() -> None:
+            await asyncio.sleep(300)
+            _queues.pop(sim_id, None)
+        asyncio.create_task(_cleanup())
 
 
 async def _sse_generator(sim_id: str) -> AsyncGenerator[str, None]:

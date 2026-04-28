@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  gateway:
+    build:
+      context: ../apps/gateway
+      dockerfile: Dockerfile
+    image: max-studio-gateway:latest
+    container_name: max-gateway
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    env_file:
+      - ../apps/gateway/.env
+    deploy:
+      resources:
+        limits:
+          memory: 700M
+          cpus: "0.9"
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
