@@ -1,5 +1,7 @@
 "use client";
 
+import "@excalidraw/excalidraw/index.css";
+
 import dynamic from "next/dynamic";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Save, Activity, Download } from "lucide-react";
@@ -17,13 +19,12 @@ interface CanvasState {
   appState: Record<string, unknown>;
 }
 
-// Excalidraw must be loaded client-side only — uses browser APIs
 const Excalidraw = dynamic(
   async () => (await import("@excalidraw/excalidraw")).Excalidraw,
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-full items-center justify-center bg-[#0A0A0B] text-zinc-500 text-sm">
+      <div className="flex h-full w-full items-center justify-center bg-[#0A0A0B] text-zinc-500 text-sm">
         Cargando canvas...
       </div>
     ),
@@ -38,7 +39,6 @@ export function CanvasClient() {
   const [initialData, setInitialData] = useState<CanvasState | null>(null);
   const [ready, setReady] = useState(false);
 
-  // Load saved canvas state on mount
   useEffect(() => {
     apiFetch<{ data: CanvasState } | null>("/canvas/latest")
       .then((res) => {
@@ -61,14 +61,13 @@ export function CanvasClient() {
       setSaveMsg("Guardado");
       setTimeout(() => setSaveMsg(""), 2000);
     } catch {
-      setSaveMsg("Error al guardar");
-      setTimeout(() => setSaveMsg(""), 3000);
+      setSaveMsg("Error — revisa SQL en Supabase");
+      setTimeout(() => setSaveMsg(""), 4000);
     } finally {
       setSaving(false);
     }
   }, []);
 
-  // Auto-save every 60s
   useEffect(() => {
     const timer = setInterval(handleSave, 60_000);
     return () => clearInterval(timer);
@@ -76,16 +75,19 @@ export function CanvasClient() {
 
   if (!ready) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#0A0A0B] text-zinc-500 text-sm">
-        Cargando...
+      <div className="flex h-full w-full items-center justify-center bg-[#0A0A0B] text-zinc-500 text-sm">
+        Cargando canvas…
       </div>
     );
   }
 
   return (
-    <div className="relative flex h-full flex-col">
+    <div
+      className="excalidraw-wrapper relative flex flex-col bg-[#0A0A0B]"
+      style={{ height: "calc(100vh - 56px)" }}
+    >
       {/* Toolbar */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-[#27272A] bg-[#0A0A0B] px-4 py-2">
+      <div className="z-10 flex shrink-0 items-center gap-2 border-b border-[#27272A] bg-[#0A0A0B] px-4 py-2">
         <span className="mr-2 text-sm font-semibold text-[#FAFAFA]">Canvas</span>
 
         <button
@@ -94,7 +96,7 @@ export function CanvasClient() {
           className="flex items-center gap-1.5 rounded-md bg-[#7C3AED]/10 px-3 py-1.5 text-xs font-medium text-[#7C3AED] transition-colors hover:bg-[#7C3AED]/20 disabled:opacity-50"
         >
           <Save className="h-3.5 w-3.5" />
-          {saving ? "Guardando..." : saveMsg || "Guardar"}
+          {saving ? "Guardando…" : saveMsg || "Guardar"}
         </button>
 
         <button
@@ -110,44 +112,47 @@ export function CanvasClient() {
           Sistema
         </button>
 
-        <div className="ml-auto flex items-center gap-1 text-xs text-[#A1A1AA]">
+        <div className="ml-auto hidden items-center gap-1 text-xs text-[#A1A1AA] md:flex">
           <Download className="h-3.5 w-3.5" />
-          <span>Ctrl+S para exportar</span>
+          <span>Auto-guardado cada 60s</span>
         </div>
       </div>
 
-      {/* Canvas area */}
-      <div className="flex-1 overflow-hidden">
+      {/* Canvas area — debe tener altura explícita */}
+      <div className="relative min-h-0 flex-1">
         <Excalidraw
           excalidrawAPI={(api) => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             apiRef.current = api as unknown as ExcalidrawAPI;
             if (initialData && api) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (api as any).updateScene({
-                elements: initialData.elements,
-                appState: { ...initialData.appState, collaborators: new Map() },
-              });
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (api as any).updateScene({
+                  elements: initialData.elements,
+                  appState: { ...initialData.appState, collaborators: new Map() },
+                });
+              } catch {
+                // initialData incompatible con la versión actual — ignorar
+              }
             }
           }}
           theme="dark"
-          UIOptions={{
-            canvasActions: {
-              // @ts-expect-error — Excalidraw v0.18 internal option
-              saveFileToDisk: true,
+          initialData={{
+            appState: {
+              viewBackgroundColor: "#0A0A0B",
+              theme: "dark",
             },
           }}
         />
-      </div>
 
-      {/* Health overlay */}
-      {showHealth && (
-        <div className="pointer-events-none absolute right-4 top-16 z-20 w-72">
-          <div className="pointer-events-auto">
-            <SystemHealthPanel />
+        {showHealth && (
+          <div className="pointer-events-none absolute right-4 top-4 z-20 w-72">
+            <div className="pointer-events-auto">
+              <SystemHealthPanel />
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
