@@ -34,6 +34,9 @@ def create_app() -> FastAPI:
         title="MAX Studio Gateway",
         version="0.1.0",
         description="API Gateway para MAX Studio PWA",
+        docs_url="/api-docs",
+        redoc_url="/api-redoc",
+        openapi_url="/api-openapi.json",
     )
 
     app.add_middleware(

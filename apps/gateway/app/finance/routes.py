@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Any
 import yfinance as yf
 
+from app.core.deps import CurrentUser
 from app.core.supabase import SupabaseRest
 
 finance_router = APIRouter(prefix="/finance", tags=["Finance"])
@@ -73,7 +74,7 @@ async def execute_finance_action(req: FinanceActionRequest):
     raise HTTPException(status_code=400, detail=f"Acción desconocida: {action}")
 
 @finance_router.get("/budgets")
-async def get_budgets_prediction() -> list[dict]:
+async def get_budgets_prediction(user: CurrentUser) -> list[dict]:  # noqa: ARG001
     """Retorna categorías de gasto con % consumido y fecha predicha de agotamiento."""
     sb = SupabaseRest()
     categories = await sb.select_many(
