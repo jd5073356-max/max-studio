@@ -234,7 +234,8 @@ async def _via_anthropic(
             "Agregar en apps/gateway/.env y reiniciar el servidor."
         )
 
-    used_model = model or settings.default_model
+    # Solo pasar model a Anthropic si es un modelo claude-* real; si no, usar default
+    used_model = model if (model and model.startswith("claude")) else settings.default_model
     messages = [*history, {"role": "user", "content": content}]
     system = await _build_system_prompt(content)
 
