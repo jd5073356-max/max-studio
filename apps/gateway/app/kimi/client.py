@@ -37,11 +37,13 @@ async def generate_text(
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
 
+    # kimi-k2.x solo acepta temperature=1; modelos moonshot-v1-* aceptan 0-1
+    temp = 1 if settings.moonshot_model.startswith("kimi") else 0.3
     payload: dict[str, Any] = {
         "model": settings.moonshot_model,
         "messages": messages,
         "max_tokens": 8192,
-        "temperature": 0.3,
+        "temperature": temp,
     }
 
     async with httpx.AsyncClient(timeout=90) as client:
@@ -74,6 +76,7 @@ async def analyze_image(
     if not settings.moonshot_api_key:
         raise ValueError("MOONSHOT_API_KEY no configurada")
 
+    temp = 1 if settings.moonshot_model.startswith("kimi") else 0.3
     payload: dict[str, Any] = {
         "model": settings.moonshot_model,
         "messages": [
@@ -94,7 +97,7 @@ async def analyze_image(
             }
         ],
         "max_tokens": 4096,
-        "temperature": 0.3,
+        "temperature": temp,
     }
 
     async with httpx.AsyncClient(timeout=60) as client:
