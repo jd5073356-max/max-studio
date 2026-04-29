@@ -19,7 +19,7 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-MOONSHOT_BASE_URL = "https://api.moonshot.cn/v1"
+MOONSHOT_BASE_URL = "https://api.moonshot.ai/v1"
 
 
 async def generate_text(
