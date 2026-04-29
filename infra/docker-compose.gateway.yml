@@ -10,6 +10,13 @@ services:
       - "8003:8003"
     env_file:
       - ../apps/gateway/.env
+    # DNS explícito — fuerza resolución externa (Anthropic, Moonshot, Supabase)
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    # Permite alcanzar servicios del host (Dispatch en :8001, Pi en :8000, etc.)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     deploy:
       resources:
         limits:
