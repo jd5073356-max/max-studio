@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Cookie, Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Query, status
 
 from app.auth.jwt import InvalidToken, decode_token
 from app.core.config import Settings, get_settings
@@ -20,12 +20,14 @@ async def get_current_user(
     settings: SettingsDep,
     max_auth: Annotated[str | None, Cookie(alias=None)] = None,
     authorization: Annotated[str | None, Header(alias="authorization")] = None,
+    token_param: Annotated[str | None, Query(alias="token")] = None,
 ) -> dict:
     """Extrae usuario del JWT.
 
-    Acepta el token de dos fuentes (en orden de prioridad):
+    Acepta el token de tres fuentes (en orden de prioridad):
     1. Header Authorization: Bearer <token>  — usado por el frontend PWA cross-origin
-    2. Cookie max_auth                        — usado por requests server-side
+    2. Query param ?token=<token>            — usado por SSE (EventSource) y download links
+    3. Cookie max_auth                        — usado por requests server-side
 
     Raises 401 si ninguna fuente provee un token válido.
     """
@@ -35,7 +37,11 @@ async def get_current_user(
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization[7:].strip()
 
-    # Prioridad 2: cookie
+    # Prioridad 2: query param (para SSE y download links — EventSource no soporta headers)
+    if not token and token_param:
+        token = token_param.strip()
+
+    # Prioridad 3: cookie
     if not token:
         token = max_auth
 

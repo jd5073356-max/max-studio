@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import { Play, FlaskConical, ChevronRight, Download, AlertCircle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { getToken } from "@/store/auth";
 
 interface AgentEvent {
   round: number;
@@ -54,8 +55,8 @@ export function SimulationDashboard() {
         body: { label: "Simulación 300 agentes" },
       });
 
-      // Connect SSE — need raw URL with auth token
-      const token = document.cookie.match(/max_auth=([^;]+)/)?.[1] ?? "";
+      // Connect SSE — EventSource no soporta headers, usamos query param con el JWT
+      const token = getToken() ?? "";
       const wsUrl = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "";
       const sseUrl = `${wsUrl}/kimi/simulation/${res.sim_id}/stream?token=${token}`;
 
