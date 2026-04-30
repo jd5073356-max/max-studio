@@ -51,7 +51,14 @@ _FINANCE_KEYWORDS = (
 
 # Instrucciones compactas que se inyectan en el mensaje cuando hay contexto finance
 _FINANCE_INJECT_TEMPLATE = """[SISTEMA: FINANCE HUB ACTIVO]
-Datos financieros actuales de Juan David:
+REGLA CRÍTICA DE INTERPRETACIÓN:
+- Los datos marcados [REAL] son dinero que Juan tiene o gana AHORA MISMO. Úsalos para balance real.
+- Los datos marcados [PROYECTADO] son metas futuras. NO los presentes como ingresos actuales.
+- Juan David trabaja sábados y domingos en un restaurante. Ese es su único ingreso real hoy.
+- Sus proyectos de negocio generan $0 reales actualmente (están en construcción).
+- Cuando hagas balance: usa solo cuentas [REAL]. Cuando hables de potencial: usa [PROYECTADO].
+
+Datos financieros de Juan David (30-abr-2026):
 {finance_lines}
 
 INSTRUCCIÓN CRÍTICA: Si el usuario pide agregar, quitar o actualizar datos financieros, incluye OBLIGATORIAMENTE al final de tu respuesta un bloque así (el sistema lo ejecuta en silencio, el usuario NO lo ve):
@@ -96,7 +103,13 @@ async def _get_claude_md_context() -> str:
 
 
 async def _get_finance_lines() -> list[str]:
-    """Retorna líneas de estado financiero con cache de 10 min."""
+    """Retorna líneas de estado financiero con cache de 10 min.
+
+    IMPORTANTE para MAX: distinguir siempre entre datos REALES y PROYECTADOS.
+    - tipo_ingreso='REAL'       → dinero que Juan tiene/gana ahora mismo
+    - tipo_ingreso='PROYECTADO' → meta futura, aún no materializada
+    - tipo_ingreso='AHORRO_META'→ objetivo de ahorro, no saldo actual
+    """
     now = time.monotonic()
     if now - _finance_cache["ts"] < _CACHE_TTL and _finance_cache["state"]:
         state = _finance_cache["state"]
@@ -109,13 +122,65 @@ async def _get_finance_lines() -> list[str]:
             state = {}
 
     lines = []
+
+    # --- Cuentas: dinero REAL disponible ---
+    lines.append("## DINERO REAL (lo que Juan tiene HOY):")
     for acc in state.get("accounts", []):
-        lines.append(f"- Cuenta '{acc['name']}' ({acc['account_type']}): ${float(acc['balance']):,.0f} COP [id:{acc['id']}]")
+        meta = acc.get("metadata") or {}
+        tipo = meta.get("tipo_ingreso", "REAL")
+        nota = meta.get("nota", "")
+        if tipo == "REAL":
+            lines.append(
+                f"- [REAL] '{acc['name']}': ${float(acc['balance']):,.0f} COP "
+                f"({nota}) [id:{acc['id']}]"
+            )
+        elif tipo == "AHORRO_META":
+            meta_cop = meta.get("meta_cop", 0)
+            lines.append(
+                f"- [META AHORRO] '{acc['name']}': ${float(acc['balance']):,.0f} COP actuales "
+                f"(meta: ${float(meta_cop):,.0f} COP) [id:{acc['id']}]"
+            )
+        else:
+            lines.append(
+                f"- '{acc['name']}' ({acc['account_type']}): ${float(acc['balance']):,.0f} COP [id:{acc['id']}]"
+            )
+
+    # --- Proyectos: separar real vs proyectado ---
+    real_projects = []
+    projected_projects = []
     for p in state.get("projects", []):
         meta = p.get("metadata") or {}
-        lines.append(f"- Proyecto '{p['name']}' ({p['status']}): ${float(p['monthly_income']):,.0f} COP/mes [id:{p['id']}] meta_mensual:{meta.get('meta_mensual',0):,.0f}")
+        tipo = meta.get("tipo_ingreso", "PROYECTADO")
+        ingreso_real = float(meta.get("ingreso_real_cop", p.get("monthly_income", 0)))
+        meta_mensual = float(meta.get("meta_mensual", 0))
+        nota = meta.get("nota", "")
+        estado = meta.get("estado", p.get("status", ""))
+        entry = (
+            f"- '{p['name']}' ({estado}): "
+            f"ingreso_real=${ingreso_real:,.0f} COP/mes | "
+            f"meta=${meta_mensual:,.0f} COP/mes | "
+            f"{nota} [id:{p['id']}]"
+        )
+        if ingreso_real > 0:
+            real_projects.append(f"  [REAL]{entry}")
+        else:
+            projected_projects.append(f"  [PROYECTADO]{entry}")
+
+    lines.append("\n## PROYECTOS — ingresos reales vs metas:")
+    if real_projects:
+        lines.extend(real_projects)
+    else:
+        lines.append("  (ningún proyecto genera ingresos reales aún — todo es $0 actual)")
+    lines.append("  Metas futuras (NO son ingresos actuales):")
+    lines.extend(projected_projects)
+
+    # --- Presupuesto de gastos ---
+    lines.append("\n## PRESUPUESTO MENSUAL (categorías de gasto):")
     for c in state.get("categories", []):
-        lines.append(f"- Categoria gasto '{c['name']}': presupuesto ${float(c['budget_limit']):,.0f} COP [id:{c['id']}]")
+        lines.append(
+            f"- '{c['name']}': presupuesto ${float(c['budget_limit']):,.0f} COP/mes [id:{c['id']}]"
+        )
+
     return lines
 
 
