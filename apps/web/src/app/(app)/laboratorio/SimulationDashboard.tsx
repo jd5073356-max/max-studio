@@ -371,15 +371,19 @@ export function SimulationDashboard() {
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {(result.docs ?? result.top_ideas.map((t, i) => ({ title: t.idea, doc_id: null, filename: `portfolio_${i+1}.md` }))).map((doc, i) => (
+            {(result.docs ?? result.top_ideas.map((t, i) => ({
+              title: t.idea,
+              doc_id: null as string | null,
+              filename: `portfolio_${i + 1}.md`,
+            }))).map((doc, i) => (
               <div key={i} className="flex items-center justify-between rounded-xl bg-white/5 border border-white/5 px-4 py-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-400">
                     {i + 1}
                   </span>
-                  <p className="text-xs font-medium truncate">{"title" in doc ? doc.title : doc.idea}</p>
+                  <p className="text-xs font-medium truncate">{doc.title}</p>
                 </div>
-                {"doc_id" in doc && doc.doc_id && (
+                {doc.doc_id && (
                   <a
                     href={`${process.env.NEXT_PUBLIC_GATEWAY_URL}/docs/${doc.doc_id}/download?token=${getToken() ?? ""}`}
                     download
