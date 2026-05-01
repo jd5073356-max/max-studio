@@ -32,7 +32,7 @@ router = APIRouter(prefix="/kimi/simulation", tags=["simulation"])
 
 _queues: dict[str, asyncio.Queue] = {}
 
-SEMAPHORE_LIMIT = 2  # Moonshot free tier: max 3 concurrent — usamos 2 para dejar margen
+SEMAPHORE_LIMIT = 1  # Moonshot free tier: 3 concurrent max — secuencial para evitar 429
 DOCS_DIR = Path("/tmp/max-docs")
 DOCS_DIR.mkdir(exist_ok=True)
 
@@ -276,38 +276,16 @@ PORTFOLIO_PROMPTS: list[dict[str, str]] = [
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-async def _kimi_with_retry(prompt: str, max_retries: int = 4) -> str:
-    """Llama a Kimi con retry exponencial en 429 (rate limit)."""
-    delay = 2.0
-    for attempt in range(max_retries):
-        try:
-            return await generate_text(prompt=prompt)
-        except Exception as exc:
-            msg = str(exc)
-            is_rate_limit = "429" in msg or "concurrency" in msg or "rate" in msg.lower()
-            if is_rate_limit and attempt < max_retries - 1:
-                wait = delay * (2 ** attempt)  # 2s, 4s, 8s, 16s
-                logger.info("Kimi 429 — retry %d/%d en %.0fs", attempt + 1, max_retries, wait)
-                await asyncio.sleep(wait)
-            else:
-                raise
-    return "[error: max retries]"
-
-
 async def _run_agent(
     sem: asyncio.Semaphore,
     round_num: int,
     agent_index: int,
     context: str,
 ) -> dict[str, Any]:
-    async with sem:
-        prompt = ROUND_PROMPTS[round_num].format(idea=context)
-        try:
-            reply = await _kimi_with_retry(prompt)
-        except Exception as exc:
-            logger.warning("Agent R%d#%d failed: %s", round_num, agent_index, exc)
-            reply = f"[error: {exc}]"
-        return {"round": round_num, "agent_index": agent_index, "reply": reply}
+    """Ejecuta un agente con retry FUERA del semáforo para no bloquear slots."""
+    prompt = ROUND_PROMPTS[round_num].format(idea=context)
+    reply = await _call_kimi_safe(sem, f"R{round_num}#{agent_index}", prompt)
+    return {"round": round_num, "agent_index": agent_index, "reply": reply}
 
 
 async def _run_portfolio_agent(
@@ -316,13 +294,30 @@ async def _run_portfolio_agent(
     agent_index: int,
     prompt: str,
 ) -> dict[str, Any]:
-    async with sem:
-        try:
-            reply = await _kimi_with_retry(prompt)
-        except Exception as exc:
-            logger.warning("Portfolio agent P%d#%d failed: %s", prompt_idx, agent_index, exc)
-            reply = f"[error: {exc}]"
-        return {"prompt_idx": prompt_idx, "agent_index": agent_index, "reply": reply}
+    """Ejecuta un agente portfolio con retry FUERA del semáforo."""
+    reply = await _call_kimi_safe(sem, f"P{prompt_idx}#{agent_index}", prompt)
+    return {"prompt_idx": prompt_idx, "agent_index": agent_index, "reply": reply}
+
+
+async def _call_kimi_safe(sem: asyncio.Semaphore, label: str, prompt: str) -> str:
+    """Adquiere semáforo → llama Kimi → libera → retry si 429 (sleep fuera del lock)."""
+    MAX_RETRIES = 5
+    for attempt in range(MAX_RETRIES):
+        async with sem:
+            try:
+                return await generate_text(prompt=prompt)
+            except Exception as exc:
+                msg = str(exc)
+                is_429 = "429" in msg or "concurrency" in msg.lower()
+                if not is_429 or attempt == MAX_RETRIES - 1:
+                    logger.warning("Agent %s failed permanently: %s", label, msg[:120])
+                    return f"[error: {msg[:200]}]"
+                # 429: liberar semáforo ANTES de dormir
+                wait = 5 * (attempt + 1)  # 5s, 10s, 15s, 20s, 25s
+                logger.info("Kimi 429 %s — attempt %d/%d, waiting %ds", label, attempt + 1, MAX_RETRIES, wait)
+        # sleep FUERA del 'async with sem' — semáforo libre para otros
+        await asyncio.sleep(wait)
+    return "[error: max retries exceeded]"
 
 
 def _extract_score(reply: str) -> float:
