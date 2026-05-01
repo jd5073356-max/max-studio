@@ -32,7 +32,7 @@ router = APIRouter(prefix="/kimi/simulation", tags=["simulation"])
 
 _queues: dict[str, asyncio.Queue] = {}
 
-SEMAPHORE_LIMIT = 5
+SEMAPHORE_LIMIT = 2  # Moonshot free tier: max 3 concurrent — usamos 2 para dejar margen
 DOCS_DIR = Path("/tmp/max-docs")
 DOCS_DIR.mkdir(exist_ok=True)
 
@@ -276,6 +276,24 @@ PORTFOLIO_PROMPTS: list[dict[str, str]] = [
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+async def _kimi_with_retry(prompt: str, max_retries: int = 4) -> str:
+    """Llama a Kimi con retry exponencial en 429 (rate limit)."""
+    delay = 2.0
+    for attempt in range(max_retries):
+        try:
+            return await generate_text(prompt=prompt)
+        except Exception as exc:
+            msg = str(exc)
+            is_rate_limit = "429" in msg or "concurrency" in msg or "rate" in msg.lower()
+            if is_rate_limit and attempt < max_retries - 1:
+                wait = delay * (2 ** attempt)  # 2s, 4s, 8s, 16s
+                logger.info("Kimi 429 — retry %d/%d en %.0fs", attempt + 1, max_retries, wait)
+                await asyncio.sleep(wait)
+            else:
+                raise
+    return "[error: max retries]"
+
+
 async def _run_agent(
     sem: asyncio.Semaphore,
     round_num: int,
@@ -285,7 +303,7 @@ async def _run_agent(
     async with sem:
         prompt = ROUND_PROMPTS[round_num].format(idea=context)
         try:
-            reply = await generate_text(prompt=prompt)
+            reply = await _kimi_with_retry(prompt)
         except Exception as exc:
             logger.warning("Agent R%d#%d failed: %s", round_num, agent_index, exc)
             reply = f"[error: {exc}]"
@@ -300,7 +318,7 @@ async def _run_portfolio_agent(
 ) -> dict[str, Any]:
     async with sem:
         try:
-            reply = await generate_text(prompt=prompt)
+            reply = await _kimi_with_retry(prompt)
         except Exception as exc:
             logger.warning("Portfolio agent P%d#%d failed: %s", prompt_idx, agent_index, exc)
             reply = f"[error: {exc}]"
