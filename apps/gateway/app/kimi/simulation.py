@@ -23,6 +23,9 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+import httpx
+
+from app.core.config import get_settings
 from app.core.deps import CurrentUser, SupabaseDep
 from app.kimi.client import generate_text
 
@@ -297,12 +300,86 @@ async def _run_portfolio_agent(
     agent_index: int,
     prompt: str,
 ) -> dict[str, Any]:
-    """Ejecuta un agente portfolio con Kimi.
-    Tier0: concurrency=3, delay=3.5s → ~17 RPM (bajo el límite de 20).
-    Tier1: subir PORTFOLIO_SEMAPHORE=16 y PORTFOLIO_INTER_CALL_DELAY=0.1.
-    """
-    reply = await _call_kimi_safe(sem, f"P{prompt_idx}#{agent_index}", prompt, inter_delay=PORTFOLIO_INTER_CALL_DELAY)
+    """Ejecuta un agente portfolio via Anthropic Haiku — 20 concurrent, RAG context."""
+    reply = await _call_anthropic_portfolio(sem, f"P{prompt_idx}#{agent_index}", prompt)
     return {"prompt_idx": prompt_idx, "agent_index": agent_index, "reply": reply}
+
+
+# ── RAG: contexto acumulado entre prompts ─────────────────────────────────────
+
+PORTFOLIO_SYSTEM = (
+    "Eres un consultor estratégico y técnico trabajando en AutoFlow Studio — "
+    "agencia de automatización IA para clínicas dentales en Colombia, fundada por "
+    "Juan David (18 años). Genera contenido de alta calidad, específico y ejecutable. "
+    "Mínimo 600 palabras. Sin texto genérico ni filler."
+)
+
+
+def _rag_score(query: str, doc_text: str) -> float:
+    """Keyword overlap para recuperar contexto relevante sin embeddings."""
+    q_words = set(query.lower().split())
+    d_words = set(doc_text[:800].lower().split())
+    overlap = len(q_words & d_words)
+    return overlap / max(len(q_words), 1)
+
+
+def _rag_retrieve(prompt: str, store: list[dict], top_k: int = 2) -> str:
+    """Devuelve el contexto de los docs previos más relevantes para este prompt."""
+    if not store:
+        return ""
+    scored = sorted(store, key=lambda s: _rag_score(prompt, s["text"]), reverse=True)
+    relevant = [s for s in scored[:top_k] if _rag_score(prompt, s["text"]) > 0.02]
+    if not relevant:
+        return ""
+    parts = [f"### {s['title']}\n{s['text'][:700]}..." for s in relevant]
+    return (
+        "\n\n[CONTEXTO DE DOCUMENTOS PREVIOS DEL PROYECTO — usa para coherencia]\n"
+        + "\n\n---\n\n".join(parts)
+        + "\n[FIN CONTEXTO]\n\n"
+    )
+
+
+async def _call_anthropic_portfolio(sem: asyncio.Semaphore, label: str, prompt: str) -> str:
+    """Llama a Claude Haiku con hasta 20 requests concurrentes.
+    Reintenta hasta 3 veces en 429 con sleep FUERA del semáforo.
+    """
+    settings = get_settings()
+    api_key = settings.anthropic_api_key
+    if not api_key:
+        return "[error: ANTHROPIC_API_KEY no configurada en el gateway]"
+
+    MAX_RETRIES = 3
+    for attempt in range(MAX_RETRIES):
+        async with sem:
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    resp = await client.post(
+                        "https://api.anthropic.com/v1/messages",
+                        headers={
+                            "x-api-key": api_key,
+                            "anthropic-version": "2023-06-01",
+                            "content-type": "application/json",
+                        },
+                        json={
+                            "model": "claude-haiku-4-5",
+                            "max_tokens": 4096,
+                            "system": PORTFOLIO_SYSTEM,
+                            "messages": [{"role": "user", "content": prompt}],
+                        },
+                    )
+                if resp.status_code == 200:
+                    return resp.json()["content"][0]["text"]
+                if resp.status_code == 429 and attempt < MAX_RETRIES - 1:
+                    logger.info("Anthropic 429 %s retry %d", label, attempt + 1)
+                else:
+                    logger.warning("Anthropic %d %s: %s", resp.status_code, label, resp.text[:200])
+                    return f"[error: HTTP {resp.status_code}]"
+            except Exception as exc:
+                if attempt == MAX_RETRIES - 1:
+                    return f"[error: {exc}]"
+                logger.warning("Anthropic agent %s failed attempt %d: %s", label, attempt, exc)
+        await asyncio.sleep(4 * (attempt + 1))
+    return "[error: max retries]"
 
 
 async def _call_kimi_safe(sem: asyncio.Semaphore, label: str, prompt: str, inter_delay: float = 0.0) -> str:
@@ -425,8 +502,11 @@ async def _run_simulation(sim_id: str, sb_url: str, sb_key: str) -> None:
 # ── Portfolio simulation ───────────────────────────────────────────────────────
 
 async def _run_portfolio_simulation(sim_id: str) -> None:
-    """12 prompts × 25 agentes = 300 total via Kimi (cuenta paid).
-    10 agentes concurrentes → ~5 min total.
+    """12 prompts × 25 agentes = 300 total via Anthropic Claude Haiku.
+
+    RAG: cada prompt recibe contexto de los mejores outputs anteriores.
+    Esto permite que los 12 documentos se referencien y sean coherentes.
+    Semáforo=20 → ~5 min total. Robusto para runs de 12h sin pérdida de contexto.
     """
     from app.core.supabase import SupabaseRest
     sb = SupabaseRest()
@@ -436,18 +516,33 @@ async def _run_portfolio_simulation(sim_id: str) -> None:
         if queue:
             queue.put_nowait({"event": event, "data": data})
 
-    sem = asyncio.Semaphore(PORTFOLIO_SEMAPHORE)  # 20 concurrent Anthropic requests
+    sem = asyncio.Semaphore(PORTFOLIO_SEMAPHORE)
     AGENTS_PER_PROMPT = 25
     docs_created: list[dict] = []
+
+    # RAG store: acumula los mejores outputs para contexto de prompts posteriores
+    rag_store: list[dict] = []
 
     try:
         for i, pdata in enumerate(PORTFOLIO_PROMPTS):
             round_num = i + 1
             label = f"P{round_num}: {pdata['title']}"
-            _emit("round_start", {"round": round_num, "label": label, "total": AGENTS_PER_PROMPT})
+            _emit("round_start", {
+                "round": round_num,
+                "label": label,
+                "total": AGENTS_PER_PROMPT,
+                "rag_docs": len(rag_store),  # cuántos docs de contexto tiene este prompt
+            })
 
+            # ── RAG: enriquecer el prompt con contexto acumulado ──────────────
+            rag_context = _rag_retrieve(pdata["prompt"], rag_store, top_k=2)
+            enriched_prompt = rag_context + pdata["prompt"]
+            logger.info("Portfolio P%d RAG context: %d chars from %d docs",
+                        round_num, len(rag_context), len(rag_store))
+
+            # ── Lanzar 25 agentes concurrentes con el prompt enriquecido ──────
             tasks = [
-                _run_portfolio_agent(sem, round_num, j, pdata["prompt"])
+                _run_portfolio_agent(sem, round_num, j, enriched_prompt)
                 for j in range(AGENTS_PER_PROMPT)
             ]
             outputs: list[str] = []
@@ -458,17 +553,24 @@ async def _run_portfolio_simulation(sim_id: str) -> None:
                     "round": round_num,
                     "index": result["agent_index"],
                     "preview": result["reply"][:80] if not result["reply"].startswith("[error") else None,
-                    "score": len(result["reply"]) / 100 if not result["reply"].startswith("[error") else 0,
+                    "score": round(len(result["reply"]) / 50, 1) if not result["reply"].startswith("[error") else 0,
                 })
 
-            # Seleccionar el mejor output
+            # ── Seleccionar mejor output y guardar ────────────────────────────
             best = _select_best(outputs)
 
-            # Guardar como doc en disco + Supabase
+            # Añadir al RAG store para los siguientes prompts
+            rag_store.append({"title": pdata["title"], "text": best})
+
+            # Guardar como doc markdown
             safe_title = pdata["title"].replace(" ", "_").replace("/", "-").lower()
             filename = f"portfolio_{i+1:02d}_{safe_title}_{sim_id[:6]}.md"
             filepath = DOCS_DIR / filename
-            md_content = f"# {pdata['title']}\n\n*Generado por 25 agentes Kimi K2.6 — SimID: {sim_id}*\n\n---\n\n{best}"
+            md_content = (
+                f"# {pdata['title']}\n\n"
+                f"*Generado por 25 agentes Claude Haiku — RAG {len(rag_store)-1} docs contexto — SimID: {sim_id}*\n\n"
+                f"---\n\n{best}"
+            )
             filepath.write_text(md_content, encoding="utf-8")
 
             row = await sb.insert("generated_docs", {
@@ -481,7 +583,8 @@ async def _run_portfolio_simulation(sim_id: str) -> None:
             docs_created.append({"title": pdata["title"], "doc_id": doc_id, "filename": filename})
 
             _emit("round_end", {"round": round_num, "doc_id": doc_id, "filename": filename})
-            logger.info("Portfolio P%d '%s' done — doc_id=%s", round_num, pdata["title"], doc_id)
+            logger.info("Portfolio P%d '%s' done — %d chars best output — doc_id=%s",
+                        round_num, pdata["title"], len(best), doc_id)
 
         _emit("complete", {
             "sim_id": sim_id,
@@ -498,8 +601,9 @@ async def _run_portfolio_simulation(sim_id: str) -> None:
     finally:
         if queue:
             queue.put_nowait(None)
+        # Limpiar queue después de 12h (no antes — puede ser un run largo)
         async def _cleanup() -> None:
-            await asyncio.sleep(300)
+            await asyncio.sleep(43200)  # 12 horas
             _queues.pop(sim_id, None)
         asyncio.create_task(_cleanup())
 
