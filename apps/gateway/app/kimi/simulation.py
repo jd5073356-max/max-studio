@@ -32,8 +32,10 @@ router = APIRouter(prefix="/kimi/simulation", tags=["simulation"])
 
 _queues: dict[str, asyncio.Queue] = {}
 
-SEMAPHORE_LIMIT = 3       # Standard mode (Kimi): 3 concurrent
-PORTFOLIO_SEMAPHORE = 10  # Portfolio mode (Kimi paid): empieza en 10, sube si no hay 429
+SEMAPHORE_LIMIT = 3      # Standard mode (Kimi) — Tier0: concurrency=3
+PORTFOLIO_SEMAPHORE = 3  # Portfolio mode — Tier0: concurrency=3, RPM=20
+# Tier1 ($10 recharge): subir PORTFOLIO_SEMAPHORE a 16 y PORTFOLIO_INTER_CALL_DELAY a 0.1
+PORTFOLIO_INTER_CALL_DELAY = 3.5  # segundos entre calls para mantenerse bajo 20 RPM
 DOCS_DIR = Path("/tmp/max-docs")
 DOCS_DIR.mkdir(exist_ok=True)
 
@@ -295,26 +297,36 @@ async def _run_portfolio_agent(
     agent_index: int,
     prompt: str,
 ) -> dict[str, Any]:
-    """Ejecuta un agente portfolio con Kimi (cuenta paid) — semáforo 10 concurrent."""
-    reply = await _call_kimi_safe(sem, f"P{prompt_idx}#{agent_index}", prompt)
+    """Ejecuta un agente portfolio con Kimi.
+    Tier0: concurrency=3, delay=3.5s → ~17 RPM (bajo el límite de 20).
+    Tier1: subir PORTFOLIO_SEMAPHORE=16 y PORTFOLIO_INTER_CALL_DELAY=0.1.
+    """
+    reply = await _call_kimi_safe(sem, f"P{prompt_idx}#{agent_index}", prompt, inter_delay=PORTFOLIO_INTER_CALL_DELAY)
     return {"prompt_idx": prompt_idx, "agent_index": agent_index, "reply": reply}
 
 
-async def _call_kimi_safe(sem: asyncio.Semaphore, label: str, prompt: str) -> str:
-    """Adquiere semáforo → llama Kimi → libera → retry si 429 (sleep fuera del lock)."""
+async def _call_kimi_safe(sem: asyncio.Semaphore, label: str, prompt: str, inter_delay: float = 0.0) -> str:
+    """Adquiere semáforo → llama Kimi → libera → retry si 429 (sleep FUERA del lock).
+
+    inter_delay: pausa adicional después de cada call exitoso para respetar RPM.
+    Tier0: inter_delay=3.5s (20 RPM max). Tier1: inter_delay=0.1s (200 RPM).
+    """
     MAX_RETRIES = 5
     for attempt in range(MAX_RETRIES):
         async with sem:
             try:
-                return await generate_text(prompt=prompt)
+                result = await generate_text(prompt=prompt)
+                # Pequeña pausa dentro del sem para no sobrepasar RPM
+                if inter_delay > 0:
+                    await asyncio.sleep(inter_delay)
+                return result
             except Exception as exc:
                 msg = str(exc)
                 is_429 = "429" in msg or "concurrency" in msg.lower()
                 if not is_429 or attempt == MAX_RETRIES - 1:
                     logger.warning("Agent %s failed permanently: %s", label, msg[:120])
                     return f"[error: {msg[:200]}]"
-                # 429: liberar semáforo ANTES de dormir
-                wait = 5 * (attempt + 1)  # 5s, 10s, 15s, 20s, 25s
+                wait = 6 * (attempt + 1)  # 6s, 12s, 18s, 24s, 30s
                 logger.info("Kimi 429 %s — attempt %d/%d, waiting %ds", label, attempt + 1, MAX_RETRIES, wait)
         # sleep FUERA del 'async with sem' — semáforo libre para otros
         await asyncio.sleep(wait)
