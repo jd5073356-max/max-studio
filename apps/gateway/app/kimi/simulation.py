@@ -23,6 +23,9 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+import httpx
+
+from app.core.config import get_settings
 from app.core.deps import CurrentUser, SupabaseDep
 from app.kimi.client import generate_text
 
@@ -32,7 +35,8 @@ router = APIRouter(prefix="/kimi/simulation", tags=["simulation"])
 
 _queues: dict[str, asyncio.Queue] = {}
 
-SEMAPHORE_LIMIT = 1  # Moonshot free tier: 3 concurrent max — secuencial para evitar 429
+SEMAPHORE_LIMIT = 1       # Standard mode (Kimi): secuencial — free tier límite 3 concurrent
+PORTFOLIO_SEMAPHORE = 20  # Portfolio mode (Anthropic Haiku): 20 concurrent — 1000 RPM disponible
 DOCS_DIR = Path("/tmp/max-docs")
 DOCS_DIR.mkdir(exist_ok=True)
 
@@ -294,9 +298,52 @@ async def _run_portfolio_agent(
     agent_index: int,
     prompt: str,
 ) -> dict[str, Any]:
-    """Ejecuta un agente portfolio con retry FUERA del semáforo."""
-    reply = await _call_kimi_safe(sem, f"P{prompt_idx}#{agent_index}", prompt)
+    """Ejecuta un agente portfolio via Anthropic Claude Haiku — 1000 RPM, alta concurrencia."""
+    reply = await _call_anthropic_fast(sem, f"P{prompt_idx}#{agent_index}", prompt)
     return {"prompt_idx": prompt_idx, "agent_index": agent_index, "reply": reply}
+
+
+async def _call_anthropic_fast(sem: asyncio.Semaphore, label: str, prompt: str) -> str:
+    """Llama a Claude Haiku directamente con hasta 20 requests simultáneos.
+    Sin retry agresivo — Anthropic 1000 RPM rara vez da 429 con semáforo 20.
+    """
+    settings = get_settings()
+    api_key = settings.anthropic_api_key
+    if not api_key:
+        return "[error: ANTHROPIC_API_KEY no configurada]"
+
+    MAX_RETRIES = 3
+    for attempt in range(MAX_RETRIES):
+        async with sem:
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.post(
+                        "https://api.anthropic.com/v1/messages",
+                        headers={
+                            "x-api-key": api_key,
+                            "anthropic-version": "2023-06-01",
+                            "content-type": "application/json",
+                        },
+                        json={
+                            "model": "claude-haiku-4-5",
+                            "max_tokens": 4096,
+                            "messages": [{"role": "user", "content": prompt}],
+                        },
+                    )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data["content"][0]["text"]
+                if resp.status_code == 429 and attempt < MAX_RETRIES - 1:
+                    logger.info("Anthropic 429 %s — retry %d", label, attempt + 1)
+                else:
+                    logger.warning("Anthropic %d %s: %s", resp.status_code, label, resp.text[:200])
+                    return f"[error: Anthropic {resp.status_code}]"
+            except Exception as exc:
+                logger.warning("Anthropic agent %s failed: %s", label, exc)
+                if attempt == MAX_RETRIES - 1:
+                    return f"[error: {exc}]"
+        await asyncio.sleep(2 * (attempt + 1))
+    return "[error: max retries]"
 
 
 async def _call_kimi_safe(sem: asyncio.Semaphore, label: str, prompt: str) -> str:
@@ -412,7 +459,9 @@ async def _run_simulation(sim_id: str, sb_url: str, sb_key: str) -> None:
 # ── Portfolio simulation ───────────────────────────────────────────────────────
 
 async def _run_portfolio_simulation(sim_id: str) -> None:
-    """12 prompts × 25 agentes = 300 total. Guarda mejor output por prompt como doc."""
+    """12 prompts × 25 agentes = 300 total via Anthropic Haiku.
+    20 agentes concurrentes → ~2 min total vs 40 min con Kimi secuencial.
+    """
     from app.core.supabase import SupabaseRest
     sb = SupabaseRest()
     queue = _queues.get(sim_id)
@@ -421,7 +470,7 @@ async def _run_portfolio_simulation(sim_id: str) -> None:
         if queue:
             queue.put_nowait({"event": event, "data": data})
 
-    sem = asyncio.Semaphore(SEMAPHORE_LIMIT)
+    sem = asyncio.Semaphore(PORTFOLIO_SEMAPHORE)  # 20 concurrent Anthropic requests
     AGENTS_PER_PROMPT = 25
     docs_created: list[dict] = []
 
